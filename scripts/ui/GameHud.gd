@@ -60,6 +60,7 @@ var aim_touch_id := -1
 var joystick_center := Vector2.ZERO
 var aim_pad_center := Vector2.ZERO
 var game_controls_visible := false
+var match_setup_settings_path := "user://match_setup.cfg"
 
 func _ready() -> void:
 	var root := Control.new()
@@ -210,7 +211,12 @@ func _build_main_menu(root: Control) -> void:
 	difficulty_option.select(1)
 	_add_menu_option(panel, "Mode", match_mode_option, Vector2(52, 242), ["Simple", "Double"])
 	_add_menu_option(panel, "Camera", start_camera_option, Vector2(52, 300), ["Terrain", "Dos joueur"])
-	panel.add_child(_menu_button("Lancer match", Vector2(88, 360), func() -> void: start_game.emit(get_main_menu_settings())))
+	_load_match_setup_settings()
+	panel.add_child(_menu_button("Lancer match", Vector2(88, 360), func() -> void:
+		var settings := get_main_menu_settings()
+		_save_match_setup_settings(settings)
+		start_game.emit(settings)
+	))
 	panel.add_child(_menu_button("Options", Vector2(88, 416), func() -> void:
 		debug_panel.visible = true
 		debug_panel.move_to_front()
@@ -224,6 +230,26 @@ func get_main_menu_settings() -> Dictionary:
 		"mode": "doubles" if match_mode_option.selected == 1 else "singles",
 		"camera_slot": 3 if start_camera_option.selected == 1 else 0
 	}
+
+func _load_match_setup_settings() -> void:
+	var config := ConfigFile.new()
+	if config.load(match_setup_settings_path) != OK:
+		return
+	player_control_option.select(1 if bool(config.get_value("match", "player_ai_enabled", false)) else 0)
+	var difficulty := String(config.get_value("match", "difficulty", "club"))
+	difficulty_option.select({"loisir": 0, "club": 1, "elite": 2}.get(difficulty, 1))
+	var mode := String(config.get_value("match", "mode", "singles"))
+	match_mode_option.select(1 if mode == "doubles" else 0)
+	var camera_slot := int(config.get_value("match", "camera_slot", 0))
+	start_camera_option.select(1 if camera_slot == 3 else 0)
+
+func _save_match_setup_settings(settings: Dictionary) -> void:
+	var config := ConfigFile.new()
+	config.set_value("match", "player_ai_enabled", bool(settings.get("player_ai_enabled", false)))
+	config.set_value("match", "difficulty", String(settings.get("difficulty", "club")))
+	config.set_value("match", "mode", String(settings.get("mode", "singles")))
+	config.set_value("match", "camera_slot", int(settings.get("camera_slot", 0)))
+	config.save(match_setup_settings_path)
 
 func _add_menu_option(root: Control, label_text: String, option: OptionButton, pos: Vector2, items: Array[String]) -> void:
 	var label := Label.new()
