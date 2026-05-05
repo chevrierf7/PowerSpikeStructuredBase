@@ -249,46 +249,10 @@ func _update_head_look() -> void:
 	skeleton.set_bone_pose_rotation(head_bone_index, head_base_rotation * look_rotation)
 
 func _movement_state_from_input(input: Vector2) -> String:
-	var forward_amount: float = input.x * court_forward_x
-	var right_amount: float = input.y * court_right_z
-	if abs(right_amount) > abs(forward_amount) + 0.15:
-		return "move_right" if right_amount > 0.0 else "move_left"
-	if abs(forward_amount) > 0.1:
-		return "move_forward" if forward_amount > 0.0 else "move_backward"
-	return "run"
+	return PlayerAnimationMap.movement_state_from_input(input, court_forward_x, court_right_z)
 
 func _hit_state_from_kind(kind: String, backhand: bool = false) -> String:
-	if backhand:
-		match kind:
-			"drop":
-				return "backhand_high_drop"
-			"smash", "lob":
-				return "backhand_high_clear"
-			"drive", "serve_drive":
-				return "backhand_drive"
-			_:
-				return "backhand_high_clear"
-	match kind:
-		"serve_short":
-			return "serve_short"
-		"serve_drive":
-			return "forehand_drive"
-		"serve_lob":
-			return "serve_long"
-		"drop":
-			return "forehand_high_drop"
-		"smash":
-			return "forehand_high_smash"
-		"drive":
-			return "forehand_drive"
-		"backhand_drop":
-			return "backhand_high_drop"
-		"backhand_clear":
-			return "backhand_high_clear"
-		"backhand_drive":
-			return "backhand_drive"
-		_:
-			return "forehand_high_clear"
+	return PlayerAnimationMap.hit_state_from_kind(kind, backhand)
 
 func _add_body() -> void:
 	var body := CollisionShape3D.new()
@@ -374,32 +338,7 @@ func _setup_animation(model_root: Node) -> void:
 	var animations := animation_player.get_animation_list()
 	if animations.is_empty():
 		return
-	animation_names = {
-		"idle": _pick_animation(animations, ["idle", "idle_wait", "attente", "stand", "wait"]),
-		"run": _pick_animation(animations, ["run", "running", "walk", "move_forward"]),
-		"move_forward": _pick_animation(animations, ["move_forward", "running", "run"]),
-		"move_backward": _pick_animation(animations, ["move_backward", "run", "running"]),
-		"move_left": _pick_animation(animations, ["move_left", "run", "running"]),
-		"move_right": _pick_animation(animations, ["move_right", "run", "running"]),
-		"serve_short": _pick_animation(animations, ["serve_short", "service court", "hit"]),
-		"serve_long": _pick_animation(animations, ["serve_long", "service long", "hit"]),
-		"forehand_low_drop_block": _pick_animation(animations, ["forehand_low_drop_block", "amorti", "drop", "hit"]),
-		"forehand_low_lift_clear": _pick_animation(animations, ["forehand_low_lift_clear", "lift", "clear", "hit"]),
-		"forehand_drive": _pick_animation(animations, ["forehand_drive", "drive", "tendu", "hit"]),
-		"forehand_high_drop": _pick_animation(animations, ["forehand_high_drop", "amorti", "drop", "hit"]),
-		"forehand_high_clear": _pick_animation(animations, ["forehand_high_clear", "degage", "clear", "hit", "coup"]),
-		"forehand_high_smash": _pick_animation(animations, ["forehand_high_smash", "smash", "tendu"]),
-		"backhand_low_drop_block": _pick_animation(animations, ["backhand_low_drop_block", "backhand", "revers", "hit"]),
-		"backhand_low_lift": _pick_animation(animations, ["backhand_low_lift", "backhand", "revers", "hit"]),
-		"backhand_drive": _pick_animation(animations, ["backhand_drive", "backhand", "revers", "hit"]),
-		"backhand_high_drop": _pick_animation(animations, ["backhand_high_drop", "backhand", "revers", "hit"]),
-		"backhand_high_clear": _pick_animation(animations, ["backhand_high_clear", "backhand", "revers", "hit"]),
-	}
-	if String(animation_names["idle"]).is_empty():
-		animation_names["idle"] = animations[0]
-	for state in animation_names.keys():
-		if String(animation_names[state]).is_empty():
-			animation_names[state] = animation_names["idle"]
+	animation_names = PlayerAnimationMap.build_animation_names(animations)
 	_set_loop(String(animation_names["idle"]), true)
 	_set_loop(String(animation_names["run"]), true)
 	_set_loop(String(animation_names["move_forward"]), true)
@@ -604,10 +543,3 @@ func _find_head_bone(found_skeleton: Skeleton3D) -> int:
 		if bone_name.contains("head") or bone_name.contains("tete"):
 			return i
 	return -1
-
-func _pick_animation(animations: PackedStringArray, keywords: Array[String]) -> String:
-	for keyword in keywords:
-		for animation_name in animations:
-			if String(animation_name).to_lower().contains(keyword):
-				return String(animation_name)
-	return ""
