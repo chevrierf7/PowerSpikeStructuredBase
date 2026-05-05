@@ -5,6 +5,11 @@ signal serve_pressed
 signal lob_pressed
 signal drop_pressed
 signal smash_pressed
+signal start_game(player_ai_enabled: bool)
+signal resume_requested
+signal free_camera_requested
+signal main_menu_requested
+signal quit_requested
 signal hitbox_toggled
 signal player_ai_toggled
 signal difficulty_toggled
@@ -19,6 +24,8 @@ var aim_vector := Vector2.ZERO
 var score_label := Label.new()
 var status_label := Label.new()
 var pause_label := Label.new()
+var main_menu_overlay := Control.new()
+var pause_menu_overlay := Control.new()
 var timing_label := Label.new()
 var aim_label := Label.new()
 var hint_label := Label.new()
@@ -57,6 +64,8 @@ func _ready() -> void:
 	_build_labels(root)
 	_build_debug_controls(root)
 	_build_mobile_controls(root)
+	_build_main_menu(root)
+	_build_pause_menu(root)
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -97,6 +106,22 @@ func set_aim_label(text: String) -> void:
 
 func set_pause_visible(enabled: bool) -> void:
 	pause_label.visible = enabled
+	pause_menu_overlay.visible = enabled
+
+func show_main_menu() -> void:
+	main_menu_overlay.visible = true
+	pause_menu_overlay.visible = false
+	joystick_area.visible = false
+	action_panel.visible = false
+	camera_panel.visible = false
+	debug_panel.visible = false
+
+func hide_menus() -> void:
+	main_menu_overlay.visible = false
+	pause_menu_overlay.visible = false
+	pause_label.visible = false
+	joystick_area.visible = game_controls_visible
+	action_panel.visible = game_controls_visible
 
 func _build_labels(root: Control) -> void:
 	score_label.position = Vector2(24, 18)
@@ -141,6 +166,92 @@ func _build_labels(root: Control) -> void:
 	hint_label.text = ""
 	hint_label.add_theme_font_size_override("font_size", 14)
 	root.add_child(hint_label)
+
+func _build_main_menu(root: Control) -> void:
+	main_menu_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(main_menu_overlay)
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.02, 0.025, 0.028, 0.72)
+	main_menu_overlay.add_child(backdrop)
+	var panel := Panel.new()
+	panel.anchor_left = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -210.0
+	panel.offset_top = -190.0
+	panel.offset_right = 210.0
+	panel.offset_bottom = 190.0
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.07, 0.08, 0.09, 0.94), Color(1, 1, 1, 0.18), 8))
+	main_menu_overlay.add_child(panel)
+	var title := Label.new()
+	title.text = "Power Spike"
+	title.position = Vector2(34, 30)
+	title.size = Vector2(352, 46)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 36)
+	title.add_theme_color_override("font_color", Color(1.0, 0.93, 0.70))
+	panel.add_child(title)
+	var subtitle := Label.new()
+	subtitle.text = "Badminton arcade"
+	subtitle.position = Vector2(34, 78)
+	subtitle.size = Vector2(352, 28)
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 17)
+	subtitle.add_theme_color_override("font_color", Color(0.86, 0.90, 0.88))
+	panel.add_child(subtitle)
+	panel.add_child(_menu_button("Jouer", Vector2(88, 132), func() -> void: start_game.emit(false)))
+	panel.add_child(_menu_button("Demo IA", Vector2(88, 188), func() -> void: start_game.emit(true)))
+	panel.add_child(_menu_button("Options", Vector2(88, 244), func() -> void:
+		debug_panel.visible = true
+		debug_panel.move_to_front()
+	))
+	panel.add_child(_menu_button("Quitter", Vector2(88, 300), func() -> void: quit_requested.emit()))
+
+func _build_pause_menu(root: Control) -> void:
+	pause_menu_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_menu_overlay.visible = false
+	root.add_child(pause_menu_overlay)
+	var backdrop := ColorRect.new()
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.02, 0.025, 0.028, 0.46)
+	pause_menu_overlay.add_child(backdrop)
+	var panel := Panel.new()
+	panel.anchor_left = 0.5
+	panel.anchor_top = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_bottom = 0.5
+	panel.offset_left = -190.0
+	panel.offset_top = -148.0
+	panel.offset_right = 190.0
+	panel.offset_bottom = 148.0
+	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.07, 0.08, 0.09, 0.94), Color(1, 1, 1, 0.18), 8))
+	pause_menu_overlay.add_child(panel)
+	var title := Label.new()
+	title.text = "Pause"
+	title.position = Vector2(38, 26)
+	title.size = Vector2(304, 38)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", Color(1.0, 0.93, 0.70))
+	panel.add_child(title)
+	panel.add_child(_menu_button("Reprendre", Vector2(78, 82), func() -> void: resume_requested.emit()))
+	panel.add_child(_menu_button("Camera libre", Vector2(78, 138), func() -> void: free_camera_requested.emit()))
+	panel.add_child(_menu_button("Menu principal", Vector2(78, 194), func() -> void: main_menu_requested.emit()))
+	panel.add_child(_menu_button("Quitter", Vector2(78, 250), func() -> void: quit_requested.emit()))
+
+func _menu_button(text: String, pos: Vector2, callback: Callable) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.position = pos
+	button.size = Vector2(244, 42)
+	button.add_theme_font_size_override("font_size", 18)
+	button.add_theme_stylebox_override("normal", _button_style(Color(0.12, 0.14, 0.16, 0.96)))
+	button.add_theme_stylebox_override("hover", _button_style(Color(0.17, 0.22, 0.25, 0.98)))
+	button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.32, 1.0)))
+	button.pressed.connect(callback)
+	return button
 
 func set_hitbox_debug(enabled: bool) -> void:
 	hitbox_button.text = "Hitbox ON" if enabled else "Hitbox OFF"

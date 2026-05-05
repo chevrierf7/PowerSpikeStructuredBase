@@ -60,6 +60,7 @@ var service_shuttle_hold_default_settings := {
 
 var status_text := "Pret a servir"
 var camera_mode := "court"
+var game_started := false
 var game_paused := false
 var free_camera_mouse_look := false
 var free_camera_angles := Vector2.ZERO
@@ -113,7 +114,10 @@ func _ready() -> void:
 	_load_camera_presets()
 	_build_world()
 	_reset_for_serve()
+	game_paused = true
+	_set_character_animations_paused(true)
 	_update_hud()
+	hud.show_main_menu()
 
 func _process(delta: float) -> void:
 	_update_landing_marker_visual()
@@ -124,7 +128,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		var key := event as InputEventKey
 		if key.pressed and not key.echo and (key.keycode == KEY_P or key.keycode == KEY_ESCAPE):
-			_toggle_pause()
+			if game_started:
+				_toggle_pause()
 			get_viewport().set_input_as_handled()
 	elif game_paused and event is InputEventMouseButton:
 		var mouse_button := event as InputEventMouseButton
@@ -233,6 +238,11 @@ func _build_world() -> void:
 	_build_camera()
 	hud = GameHud.new()
 	add_child(hud)
+	hud.start_game.connect(_start_game)
+	hud.resume_requested.connect(_resume_game)
+	hud.free_camera_requested.connect(_show_free_camera_pause)
+	hud.main_menu_requested.connect(_return_to_main_menu)
+	hud.quit_requested.connect(_quit_game)
 	hud.serve_pressed.connect(try_serve)
 	hud.lob_pressed.connect(func() -> void: try_hit("lob"))
 	hud.drop_pressed.connect(func() -> void: try_hit("drop"))
@@ -286,6 +296,8 @@ func _add_gameplay_court() -> void:
 	add_child(court)
 
 func try_serve() -> void:
+	if not game_started:
+		return
 	if match_state.match_over:
 		return
 	if match_state.set_over:
@@ -304,6 +316,8 @@ func try_serve() -> void:
 	_start_rally_from_server("player", "serve_lob")
 
 func try_hit(kind: String) -> void:
+	if not game_started:
+		return
 	if player.is_hitting:
 		status_text = "Frappe en cours"
 		_update_hud()
@@ -1201,6 +1215,64 @@ func _toggle_camera() -> void:
 		status_text = "Camera terrain"
 	_update_hud()
 
+func _start_game(menu_player_ai_enabled: bool) -> void:
+	match_state = MatchState.new()
+	player_ai_enabled = menu_player_ai_enabled
+	player_ai_action_time = -1.0
+	player_ai_serve_time = -1.0
+	ai_serve_time = -1.0
+	next_ai_action_time = -1.0
+	game_started = true
+	game_paused = false
+	free_camera_mouse_look = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_set_character_animations_paused(false)
+	status_text = "Pret a servir"
+	hud.hide_menus()
+	hud.set_player_ai(player_ai_enabled)
+	_reset_for_serve()
+	_update_hud()
+	if player_ai_enabled and match_state.server_side == "player":
+		player_ai_serve_time = _now() + 0.9
+
+func _resume_game() -> void:
+	if not game_started:
+		return
+	game_paused = false
+	free_camera_mouse_look = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_set_character_animations_paused(false)
+	status_text = "Reprise"
+	hud.hide_menus()
+	_update_hud()
+
+func _show_free_camera_pause() -> void:
+	if not game_started:
+		return
+	game_paused = true
+	free_camera_mouse_look = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	free_camera_angles = Vector2(camera.rotation_degrees.x, camera.rotation_degrees.y)
+	_set_character_animations_paused(true)
+	status_text = "Pause - camera libre"
+	hud.set_pause_visible(false)
+	_update_hud()
+
+func _return_to_main_menu() -> void:
+	game_started = false
+	game_paused = true
+	free_camera_mouse_look = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	match_state = MatchState.new()
+	status_text = "Pret a servir"
+	_set_character_animations_paused(true)
+	_reset_for_serve()
+	hud.show_main_menu()
+	_update_hud()
+
+func _quit_game() -> void:
+	get_tree().quit()
+
 func _toggle_pause() -> void:
 	game_paused = not game_paused
 	free_camera_mouse_look = false
@@ -1212,7 +1284,10 @@ func _toggle_pause() -> void:
 	else:
 		status_text = "Reprise"
 	if hud != null:
-		hud.set_pause_visible(game_paused)
+		if game_paused:
+			hud.set_pause_visible(true)
+		else:
+			hud.hide_menus()
 	_update_hud()
 
 func _set_character_animations_paused(paused: bool) -> void:
