@@ -8,6 +8,7 @@
 exports/
 builds/
 *.log
+stats/ai_match_stats.csv
 
 # OS/editor noise
 .DS_Store
