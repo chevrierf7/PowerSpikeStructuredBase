@@ -35,6 +35,12 @@ var main_start_button := Button.new()
 var match_settings_button := Button.new()
 var menu_gear_button := Button.new()
 var menu_fade_rect := ColorRect.new()
+var pre_match_intro_overlay := Control.new()
+var intro_kai_card := Panel.new()
+var intro_mina_card := Panel.new()
+var intro_vs_label := Label.new()
+var intro_status_label := Label.new()
+var intro_settings_label := Label.new()
 var ui_click_player := AudioStreamPlayer.new()
 var player_name_option := OptionButton.new()
 var player_control_option := OptionButton.new()
@@ -320,6 +326,7 @@ func _build_main_menu(root: Control) -> void:
 	main_menu_overlay.add_child(fx_layer)
 	_add_menu_speed_lines(fx_layer, true)
 	_add_menu_light_particles(fx_layer)
+	_build_pre_match_intro(root)
 	menu_fade_rect.name = "FadeOut"
 	menu_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	menu_fade_rect.color = Color(0.0, 0.0, 0.0, 0.0)
@@ -333,10 +340,13 @@ func _start_match_from_menu() -> void:
 	ui_click_player.play()
 	var settings := get_main_menu_settings()
 	_save_match_setup_settings(settings)
-	var tween := create_tween()
-	tween.tween_property(menu_fade_rect, "color", Color(0.0, 0.0, 0.0, 1.0), 0.26)
-	await tween.finished
+	await _play_pre_match_intro(settings)
 	start_game.emit(settings)
+	await get_tree().process_frame
+	var tween := create_tween()
+	tween.tween_property(pre_match_intro_overlay, "modulate", Color(1, 1, 1, 0), 1.25).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	await tween.finished
+	pre_match_intro_overlay.visible = false
 	menu_fade_rect.color = Color(0.0, 0.0, 0.0, 0.0)
 	main_start_button.disabled = false
 
@@ -365,6 +375,157 @@ func _hide_match_settings_panel() -> void:
 	await tween.finished
 	main_settings_panel.visible = false
 	main_settings_panel.position.y = -165.0
+
+func _build_pre_match_intro(root: Control) -> void:
+	pre_match_intro_overlay.name = "PreMatchIntro"
+	pre_match_intro_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pre_match_intro_overlay.visible = false
+	pre_match_intro_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(pre_match_intro_overlay)
+	var shade := ColorRect.new()
+	shade.name = "IntroShade"
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0.0, 0.0, 0.0, 1.0)
+	pre_match_intro_overlay.add_child(shade)
+	intro_kai_card = _build_intro_card("KAI", "PLAYER", Color(0.04, 0.42, 0.86, 0.90))
+	intro_kai_card.anchor_left = 0.5
+	intro_kai_card.anchor_top = 0.5
+	intro_kai_card.anchor_right = 0.5
+	intro_kai_card.anchor_bottom = 0.5
+	intro_kai_card.offset_left = -560.0
+	intro_kai_card.offset_top = -95.0
+	intro_kai_card.offset_right = -165.0
+	intro_kai_card.offset_bottom = 125.0
+	pre_match_intro_overlay.add_child(intro_kai_card)
+	intro_mina_card = _build_intro_card("MINA", "RIVAL", Color(0.86, 0.12, 0.28, 0.90))
+	intro_mina_card.anchor_left = 0.5
+	intro_mina_card.anchor_top = 0.5
+	intro_mina_card.anchor_right = 0.5
+	intro_mina_card.anchor_bottom = 0.5
+	intro_mina_card.offset_left = 165.0
+	intro_mina_card.offset_top = -95.0
+	intro_mina_card.offset_right = 560.0
+	intro_mina_card.offset_bottom = 125.0
+	pre_match_intro_overlay.add_child(intro_mina_card)
+	intro_vs_label.anchor_left = 0.5
+	intro_vs_label.anchor_top = 0.5
+	intro_vs_label.anchor_right = 0.5
+	intro_vs_label.anchor_bottom = 0.5
+	intro_vs_label.offset_left = -125.0
+	intro_vs_label.offset_top = -78.0
+	intro_vs_label.offset_right = 125.0
+	intro_vs_label.offset_bottom = 28.0
+	intro_vs_label.text = "VS"
+	intro_vs_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro_vs_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	intro_vs_label.add_theme_font_size_override("font_size", 76)
+	intro_vs_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.38))
+	intro_vs_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.90))
+	intro_vs_label.add_theme_constant_override("shadow_offset_x", 4)
+	intro_vs_label.add_theme_constant_override("shadow_offset_y", 5)
+	pre_match_intro_overlay.add_child(intro_vs_label)
+	intro_settings_label.anchor_left = 0.5
+	intro_settings_label.anchor_top = 0.5
+	intro_settings_label.anchor_right = 0.5
+	intro_settings_label.anchor_bottom = 0.5
+	intro_settings_label.offset_left = -360.0
+	intro_settings_label.offset_top = 140.0
+	intro_settings_label.offset_right = 360.0
+	intro_settings_label.offset_bottom = 178.0
+	intro_settings_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro_settings_label.add_theme_font_size_override("font_size", 20)
+	intro_settings_label.add_theme_color_override("font_color", Color(0.88, 0.98, 1.0))
+	pre_match_intro_overlay.add_child(intro_settings_label)
+	intro_status_label.anchor_left = 0.5
+	intro_status_label.anchor_top = 0.5
+	intro_status_label.anchor_right = 0.5
+	intro_status_label.anchor_bottom = 0.5
+	intro_status_label.offset_left = -260.0
+	intro_status_label.offset_top = 195.0
+	intro_status_label.offset_right = 260.0
+	intro_status_label.offset_bottom = 280.0
+	intro_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	intro_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	intro_status_label.add_theme_font_size_override("font_size", 58)
+	intro_status_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
+	intro_status_label.add_theme_color_override("font_shadow_color", Color(0.04, 0.55, 1.0, 0.95))
+	intro_status_label.add_theme_constant_override("shadow_offset_x", 3)
+	intro_status_label.add_theme_constant_override("shadow_offset_y", 3)
+	pre_match_intro_overlay.add_child(intro_status_label)
+
+func _build_intro_card(player_name: String, role: String, accent: Color) -> Panel:
+	var card := Panel.new()
+	card.add_theme_stylebox_override("panel", _intro_card_style(accent))
+	var name_label := Label.new()
+	name_label.text = player_name
+	name_label.position = Vector2(26, 38)
+	name_label.size = Vector2(340, 82)
+	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name_label.add_theme_font_size_override("font_size", 56)
+	name_label.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
+	name_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.80))
+	name_label.add_theme_constant_override("shadow_offset_x", 3)
+	name_label.add_theme_constant_override("shadow_offset_y", 4)
+	card.add_child(name_label)
+	var role_label := Label.new()
+	role_label.text = role
+	role_label.position = Vector2(26, 128)
+	role_label.size = Vector2(340, 32)
+	role_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	role_label.add_theme_font_size_override("font_size", 18)
+	role_label.add_theme_color_override("font_color", Color(0.78, 0.96, 1.0))
+	card.add_child(role_label)
+	return card
+
+func _play_pre_match_intro(settings: Dictionary) -> void:
+	if main_settings_panel.visible:
+		await _hide_match_settings_panel()
+	pre_match_intro_overlay.visible = true
+	pre_match_intro_overlay.modulate = Color(1, 1, 1, 0)
+	_set_intro_card_offsets(intro_kai_card, -720.0, -325.0, -175.0, 45.0)
+	_set_intro_card_offsets(intro_mina_card, 325.0, 720.0, -15.0, 205.0)
+	intro_vs_label.scale = Vector2(0.75, 0.75)
+	intro_status_label.text = ""
+	intro_settings_label.text = _intro_settings_text(settings)
+	var intro_in := create_tween()
+	intro_in.set_parallel(true)
+	intro_in.tween_property(pre_match_intro_overlay, "modulate", Color.WHITE, 0.18)
+	intro_in.tween_property(intro_kai_card, "offset_left", -560.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	intro_in.tween_property(intro_kai_card, "offset_right", -165.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	intro_in.tween_property(intro_kai_card, "offset_top", -95.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	intro_in.tween_property(intro_kai_card, "offset_bottom", 125.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	intro_in.tween_property(intro_mina_card, "offset_left", 165.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	intro_in.tween_property(intro_mina_card, "offset_right", 560.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	intro_in.tween_property(intro_mina_card, "offset_top", -95.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	intro_in.tween_property(intro_mina_card, "offset_bottom", 125.0, 0.55).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	intro_in.tween_property(intro_vs_label, "scale", Vector2.ONE, 0.42).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await intro_in.finished
+	await get_tree().create_timer(1.10).timeout
+	intro_status_label.text = "READY?"
+	intro_status_label.scale = Vector2(0.82, 0.82)
+	var ready_tween := create_tween()
+	ready_tween.tween_property(intro_status_label, "scale", Vector2.ONE, 0.13).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await ready_tween.finished
+	await get_tree().create_timer(1.00).timeout
+	intro_status_label.text = "GO!"
+	intro_status_label.scale = Vector2(1.18, 1.18)
+	var go_tween := create_tween()
+	go_tween.tween_property(intro_status_label, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await go_tween.finished
+	await get_tree().create_timer(0.70).timeout
+
+func _intro_settings_text(settings: Dictionary) -> String:
+	var mode_text := "DOUBLE" if String(settings.get("mode", "singles")) == "doubles" else "SIMPLE"
+	var difficulty_text := String(settings.get("difficulty", "club")).to_upper()
+	var camera_text := "DOS JOUEUR" if int(settings.get("camera_slot", 0)) == 3 else "TERRAIN"
+	return "%s  /  %s  /  CAMERA %s" % [mode_text, difficulty_text, camera_text]
+
+func _set_intro_card_offsets(card: Control, left: float, right: float, top: float, bottom: float) -> void:
+	card.offset_left = left
+	card.offset_right = right
+	card.offset_top = top
+	card.offset_bottom = bottom
 
 func _animate_main_menu() -> void:
 	var logo_tween := create_tween()
@@ -971,6 +1132,17 @@ func _start_button_style(fill: Color, border: Color, shadow: int) -> StyleBoxFla
 	style.shadow_color = Color(0.20, 0.85, 1.0, 0.45)
 	style.shadow_size = shadow
 	style.shadow_offset = Vector2(0, 0)
+	return style
+
+func _intro_card_style(accent: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(accent.r * 0.18, accent.g * 0.22, accent.b * 0.28, 0.88)
+	style.border_color = Color(accent.r, accent.g, accent.b, 0.82)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(8)
+	style.shadow_color = Color(accent.r, accent.g, accent.b, 0.36)
+	style.shadow_size = 16
+	style.shadow_offset = Vector2(0, 6)
 	return style
 
 func _button_style(fill: Color) -> StyleBoxFlat:

@@ -101,6 +101,7 @@ var player_recovery_unlocked_at := 0.0
 var rally_start_time := 0.0
 var rally_start_server := ""
 var rally_start_service_kind := ""
+var player_service_unlocked_at := 0.0
 const GYM_SCENE := "res://scenes/environment/Gym_JP_A.tscn"
 const COURT_SCENE := "res://scenes/court/Court.tscn"
 const RENDER_TUNING_SCENE := "res://scenes/debug/RenderTuningPanel.tscn"
@@ -313,6 +314,10 @@ func try_serve() -> void:
 		ai_serve_time = _now() + 0.8
 		_update_hud()
 		return
+	if _player_service_is_locked():
+		status_text = "Prepare-toi"
+		_update_hud()
+		return
 	_start_rally_from_server("player", "serve_lob")
 
 func try_hit(kind: String) -> void:
@@ -326,6 +331,10 @@ func try_hit(kind: String) -> void:
 		if match_state.match_over or match_state.set_over:
 			return
 		if match_state.server_side == "player":
+			if _player_service_is_locked():
+				status_text = "Prepare-toi"
+				_update_hud()
+				return
 			_start_rally_from_server("player", _service_kind_from_shot(kind))
 		else:
 			status_text = "Service adverse"
@@ -348,6 +357,9 @@ func _start_rally_from_server(side: String, service_kind: String) -> void:
 	rally_start_service_kind = service_kind
 	_detach_shuttle_from_service_hand()
 	_hit_from_side(side, service_kind)
+
+func _player_service_is_locked() -> bool:
+	return player_service_unlocked_at > 0.0 and _now() < player_service_unlocked_at
 
 func _hit_from_side(side: String, kind: String) -> void:
 	var hitter: PlayerCharacter = player if side == "player" else opponent
@@ -1351,6 +1363,7 @@ func _start_game(menu_settings: Dictionary) -> void:
 	next_ai_action_time = -1.0
 	game_started = true
 	game_paused = false
+	player_service_unlocked_at = _now() + 2.0
 	free_camera_mouse_look = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_set_character_animations_paused(false)
@@ -1362,7 +1375,7 @@ func _start_game(menu_settings: Dictionary) -> void:
 	_select_camera_preset(start_camera_slot)
 	_update_hud()
 	if player_ai_enabled and match_state.server_side == "player":
-		player_ai_serve_time = _now() + 0.9
+		player_ai_serve_time = player_service_unlocked_at
 
 func _resume_game() -> void:
 	if not game_started:
