@@ -373,6 +373,7 @@ func _hit_from_side(side: String, kind: String) -> void:
 	profile = profile.duplicate()
 	if service_fault_type == "net" or _should_force_net_fault(side, kind):
 		profile["net_fault"] = true
+	shuttle.apply_shot_visual_settings(_shuttle_visual_settings_for_shot(kind))
 	var contact_position: Vector3 = shuttle.global_position
 	var predicted: Vector3 = shuttle.launch(target, float(profile["duration"]), float(profile["apex"]), profile)
 	var hit_direction: Vector3 = shuttle.velocity.normalized()
@@ -431,45 +432,45 @@ func _racket_impact_settings_for_shot(shot_kind: String) -> Dictionary:
 	match shot_kind:
 		"smash":
 			settings.merge({
-				"scale": 1.38,
-				"opacity": 0.95,
+				"scale": 1.08,
+				"opacity": 0.82,
 				"duration": 0.13,
-				"color": Color(1.0, 0.28, 0.08, 1.0),
-				"flash_color": Color(1.0, 0.88, 0.44, 1.0),
-				"stroke_count": 18,
-				"length_min": 0.46,
-				"length_max": 1.05,
-				"width_min": 0.040,
-				"width_max": 0.085,
-				"flash_radius": 0.20
+				"color": Color(1.0, 0.34, 0.10, 1.0),
+				"flash_color": Color(1.0, 0.80, 0.34, 1.0),
+				"stroke_count": 14,
+				"length_min": 0.34,
+				"length_max": 0.76,
+				"width_min": 0.030,
+				"width_max": 0.062,
+				"flash_radius": 0.14
 			}, true)
 		"drive", "serve_drive":
 			settings.merge({
-				"scale": 1.12,
-				"opacity": 0.88,
+				"scale": 0.96,
+				"opacity": 0.76,
 				"duration": 0.12,
 				"color": Color(1.0, 0.78, 0.18, 1.0),
 				"flash_color": Color(1.0, 0.95, 0.62, 1.0),
-				"stroke_count": 12,
-				"length_min": 0.38,
-				"length_max": 0.86,
-				"width_min": 0.026,
-				"width_max": 0.058,
-				"flash_radius": 0.14
+				"stroke_count": 10,
+				"length_min": 0.28,
+				"length_max": 0.62,
+				"width_min": 0.022,
+				"width_max": 0.048,
+				"flash_radius": 0.11
 			}, true)
 		"drop", "serve_short":
 			settings.merge({
-				"scale": 0.58,
-				"opacity": 0.46,
-				"duration": 0.10,
-				"color": Color(0.38, 1.0, 0.62, 1.0),
-				"flash_color": Color(0.78, 1.0, 0.82, 1.0),
-				"stroke_count": 5,
-				"length_min": 0.14,
-				"length_max": 0.32,
-				"width_min": 0.018,
-				"width_max": 0.038,
-				"flash_radius": 0.075
+				"scale": 0.72,
+				"opacity": 0.64,
+				"duration": 0.12,
+				"color": Color(0.48, 1.0, 0.66, 1.0),
+				"flash_color": Color(0.86, 1.0, 0.86, 1.0),
+				"stroke_count": 6,
+				"length_min": 0.18,
+				"length_max": 0.38,
+				"width_min": 0.020,
+				"width_max": 0.040,
+				"flash_radius": 0.09
 			}, true)
 		"lob", "serve_lob":
 			settings.merge({
@@ -486,6 +487,68 @@ func _racket_impact_settings_for_shot(shot_kind: String) -> Dictionary:
 				"flash_radius": 0.10
 			}, true)
 	return settings
+
+func _shuttle_visual_settings_for_shot(shot_kind: String) -> Dictionary:
+	match shot_kind:
+		"smash":
+			return {
+				"trail_color": Color(1.0, 0.36, 0.12, 0.68),
+				"trail_limit": 14,
+				"speed_lines": {
+					"enabled": true,
+					"opacity": 0.82,
+					"main_length": 1.08,
+					"width": 0.030,
+					"color": Color(1.0, 0.46, 0.18, 1.0)
+				}
+			}
+		"drive", "serve_drive":
+			return {
+				"trail_color": Color(1.0, 0.82, 0.22, 0.62),
+				"trail_limit": 12,
+				"speed_lines": {
+					"enabled": true,
+					"opacity": 0.68,
+					"main_length": 0.86,
+					"width": 0.024,
+					"color": Color(1.0, 0.86, 0.32, 1.0)
+				}
+			}
+		"drop", "serve_short":
+			return {
+				"trail_color": Color(0.46, 1.0, 0.66, 0.58),
+				"trail_limit": 7,
+				"speed_lines": {
+					"enabled": true,
+					"opacity": 0.46,
+					"main_length": 0.36,
+					"width": 0.018,
+					"color": Color(0.58, 1.0, 0.70, 1.0)
+				}
+			}
+		"lob", "serve_lob":
+			return {
+				"trail_color": Color(0.52, 0.78, 1.0, 0.56),
+				"trail_limit": 18,
+				"speed_lines": {
+					"enabled": true,
+					"opacity": 0.50,
+					"main_length": 0.68,
+					"width": 0.020,
+					"color": Color(0.64, 0.86, 1.0, 1.0)
+				}
+			}
+	return {
+		"trail_color": Color(1.0, 0.92, 0.36, 0.56),
+		"trail_limit": 14,
+		"speed_lines": {
+			"enabled": true,
+			"opacity": 0.60,
+			"main_length": 0.72,
+			"width": 0.022,
+			"color": Color(1.0, 0.94, 0.55, 1.0)
+		}
+	}
 
 func _racket_contact_position(hitter: PlayerCharacter) -> Vector3:
 	var forward := Vector3(hitter.court_forward_x * 0.58, 1.18, hitter.racket_side_z * 0.34)

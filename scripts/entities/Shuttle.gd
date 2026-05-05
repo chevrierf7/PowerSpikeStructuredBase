@@ -29,6 +29,7 @@ var impact_duration := 0.18
 var impact_size_start := 0.38
 var impact_size_end := 1.38
 var impact_color := Color(1.0, 0.82, 0.18, 0.52)
+var trail_color := Color(1.0, 0.92, 0.36, 0.56)
 const TRAIL_POINT_LIMIT := 18
 var trail_point_limit := TRAIL_POINT_LIMIT
 var default_model_rotation_degrees := Vector3(90.0, 0.0, 0.0)
@@ -36,6 +37,16 @@ var service_hold_rotation_degrees := Vector3.ZERO
 
 func set_trail_limit(value: int) -> void:
 	trail_point_limit = clamp(value, 2, 36)
+
+func apply_shot_visual_settings(settings: Dictionary) -> void:
+	set_trail_limit(int(settings.get("trail_limit", trail_point_limit)))
+	var trail_color_value: Variant = settings.get("trail_color", trail_color)
+	if trail_color_value is Color:
+		trail_color = trail_color_value
+		if trail_marker != null:
+			trail_marker.material_override = GameConfig.material(trail_color)
+	if speed_lines != null:
+		speed_lines.apply_settings(settings.get("speed_lines", {}))
 
 func set_service_hold_rotation(rotation_degrees_value: Vector3) -> void:
 	service_hold_rotation_degrees = rotation_degrees_value
@@ -150,7 +161,7 @@ func _add_visual_helpers() -> void:
 	trail_marker.name = "ShuttleTrail"
 	trail_marker.top_level = true
 	trail_marker.mesh = trail_mesh
-	trail_marker.material_override = GameConfig.material(Color(1.0, 0.92, 0.36, 0.56))
+	trail_marker.material_override = GameConfig.material(trail_color)
 	add_child(trail_marker)
 
 	speed_lines = ShuttleSpeedLines.new()
