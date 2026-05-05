@@ -376,7 +376,7 @@ func _hit_from_side(side: String, kind: String) -> void:
 	var contact_position: Vector3 = shuttle.global_position
 	var predicted: Vector3 = shuttle.launch(target, float(profile["duration"]), float(profile["apex"]), profile)
 	var hit_direction: Vector3 = shuttle.velocity.normalized()
-	spawn_racket_impact_fx(contact_position, hit_direction)
+	spawn_racket_impact_fx(contact_position, hit_direction, kind)
 	_show_landing_marker(predicted)
 	if match_state.shuttle_landing_side == "opponent":
 		opponent_reception_target = _opponent_chase_target_from_landing(predicted)
@@ -409,7 +409,7 @@ func apply_landing_marker_settings(settings: Dictionary) -> void:
 	_apply_landing_marker_material()
 	_update_landing_marker_visual()
 
-func spawn_racket_impact_fx(racket_position: Vector3, hit_direction: Vector3) -> void:
+func spawn_racket_impact_fx(racket_position: Vector3, hit_direction: Vector3, shot_kind: String) -> void:
 	if not bool(anime_fx_settings.get("enabled", true)):
 		return
 	if hit_direction.length() <= 0.01:
@@ -424,7 +424,68 @@ func spawn_racket_impact_fx(racket_position: Vector3, hit_direction: Vector3) ->
 	fx.global_position = racket_position + direction * 0.14
 	add_child(fx)
 	if fx.has_method("setup"):
-		fx.call("setup", direction, anime_fx_settings)
+		fx.call("setup", direction, _racket_impact_settings_for_shot(shot_kind))
+
+func _racket_impact_settings_for_shot(shot_kind: String) -> Dictionary:
+	var settings := anime_fx_settings.duplicate()
+	match shot_kind:
+		"smash":
+			settings.merge({
+				"scale": 1.38,
+				"opacity": 0.95,
+				"duration": 0.13,
+				"color": Color(1.0, 0.28, 0.08, 1.0),
+				"flash_color": Color(1.0, 0.88, 0.44, 1.0),
+				"stroke_count": 18,
+				"length_min": 0.46,
+				"length_max": 1.05,
+				"width_min": 0.040,
+				"width_max": 0.085,
+				"flash_radius": 0.20
+			}, true)
+		"drive", "serve_drive":
+			settings.merge({
+				"scale": 1.12,
+				"opacity": 0.88,
+				"duration": 0.12,
+				"color": Color(1.0, 0.78, 0.18, 1.0),
+				"flash_color": Color(1.0, 0.95, 0.62, 1.0),
+				"stroke_count": 12,
+				"length_min": 0.38,
+				"length_max": 0.86,
+				"width_min": 0.026,
+				"width_max": 0.058,
+				"flash_radius": 0.14
+			}, true)
+		"drop", "serve_short":
+			settings.merge({
+				"scale": 0.58,
+				"opacity": 0.46,
+				"duration": 0.10,
+				"color": Color(0.38, 1.0, 0.62, 1.0),
+				"flash_color": Color(0.78, 1.0, 0.82, 1.0),
+				"stroke_count": 5,
+				"length_min": 0.14,
+				"length_max": 0.32,
+				"width_min": 0.018,
+				"width_max": 0.038,
+				"flash_radius": 0.075
+			}, true)
+		"lob", "serve_lob":
+			settings.merge({
+				"scale": 0.86,
+				"opacity": 0.62,
+				"duration": 0.16,
+				"color": Color(0.44, 0.74, 1.0, 1.0),
+				"flash_color": Color(0.84, 0.94, 1.0, 1.0),
+				"stroke_count": 8,
+				"length_min": 0.24,
+				"length_max": 0.58,
+				"width_min": 0.020,
+				"width_max": 0.048,
+				"flash_radius": 0.10
+			}, true)
+	return settings
 
 func _racket_contact_position(hitter: PlayerCharacter) -> Vector3:
 	var forward := Vector3(hitter.court_forward_x * 0.58, 1.18, hitter.racket_side_z * 0.34)

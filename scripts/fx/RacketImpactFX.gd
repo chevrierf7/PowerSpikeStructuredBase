@@ -5,9 +5,18 @@ var duration := 0.15
 var opacity := 0.90
 var fx_scale := 1.0
 var fx_color := Color(0.10, 0.105, 0.11, 1.0)
+var flash_color := Color(1.0, 0.94, 0.66, 1.0)
 var billboard_enabled := true
 var started_at := 0.0
 var impact_direction := Vector3.FORWARD
+var stroke_count := 14
+var stroke_length_min := 0.34
+var stroke_length_max := 0.82
+var stroke_width_min := 0.030
+var stroke_width_max := 0.070
+var stroke_inner_min := 0.055
+var stroke_inner_max := 0.12
+var flash_radius := 0.16
 var _mesh_instance := MeshInstance3D.new()
 var _flash_instance := MeshInstance3D.new()
 var _mesh := ImmediateMesh.new()
@@ -40,6 +49,17 @@ func setup(hit_direction: Vector3, settings: Dictionary) -> void:
 	var color_value: Variant = settings.get("color", fx_color)
 	if color_value is Color:
 		fx_color = color_value
+	var flash_color_value: Variant = settings.get("flash_color", flash_color)
+	if flash_color_value is Color:
+		flash_color = flash_color_value
+	stroke_count = int(settings.get("stroke_count", stroke_count))
+	stroke_length_min = float(settings.get("length_min", stroke_length_min))
+	stroke_length_max = float(settings.get("length_max", stroke_length_max))
+	stroke_width_min = float(settings.get("width_min", stroke_width_min))
+	stroke_width_max = float(settings.get("width_max", stroke_width_max))
+	stroke_inner_min = float(settings.get("inner_min", stroke_inner_min))
+	stroke_inner_max = float(settings.get("inner_max", stroke_inner_max))
+	flash_radius = float(settings.get("flash_radius", flash_radius))
 	billboard_enabled = bool(settings.get("billboard_enabled", billboard_enabled))
 	_draw_impact_mesh()
 	_apply_directional_orientation()
@@ -49,7 +69,7 @@ func _process(_delta: float) -> void:
 	var t: float = clamp(age / max(duration, 0.01), 0.0, 1.0)
 	scale = Vector3.ONE * lerp(0.75, 1.55, t) * fx_scale
 	_material.albedo_color = Color(fx_color.r, fx_color.g, fx_color.b, opacity * (1.0 - t))
-	_flash_material.albedo_color = Color(1.0, 0.94, 0.66, opacity * 0.72 * (1.0 - t))
+	_flash_material.albedo_color = Color(flash_color.r, flash_color.g, flash_color.b, opacity * 0.72 * (1.0 - t))
 	if billboard_enabled and get_viewport().get_camera_3d() != null:
 		look_at(get_viewport().get_camera_3d().global_position, Vector3.UP)
 		_align_billboard_strokes()
@@ -83,11 +103,11 @@ func _draw_impact_mesh() -> void:
 	_flash_mesh.clear_surfaces()
 	var base_angle: float = 0.0
 	_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	for i in range(14):
+	for i in range(stroke_count):
 		var angle: float = base_angle + deg_to_rad(-105.0 + float(i) * 16.0 + randf_range(-7.0, 7.0))
-		var line_length: float = randf_range(0.34, 0.82)
-		var width: float = randf_range(0.030, 0.070)
-		var inner: float = randf_range(0.055, 0.12)
+		var line_length: float = randf_range(stroke_length_min, stroke_length_max)
+		var width: float = randf_range(stroke_width_min, stroke_width_max)
+		var inner: float = randf_range(stroke_inner_min, stroke_inner_max)
 		var dir: Vector3 = Vector3(cos(angle), sin(angle), 0.0).normalized()
 		var side: Vector3 = Vector3(-dir.y, dir.x, 0.0) * width
 		var a: Vector3 = dir * inner
@@ -97,7 +117,7 @@ func _draw_impact_mesh() -> void:
 		_mesh.surface_add_vertex(b)
 	_mesh.surface_end()
 	_flash_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	var radius: float = 0.16
+	var radius: float = flash_radius
 	_flash_mesh.surface_add_vertex(Vector3(-radius, 0.0, 0.002))
 	_flash_mesh.surface_add_vertex(Vector3(0.0, radius, 0.002))
 	_flash_mesh.surface_add_vertex(Vector3(radius, 0.0, 0.002))
