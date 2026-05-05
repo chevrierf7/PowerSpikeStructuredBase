@@ -100,8 +100,6 @@ var player_recovery_unlocked_at := 0.0
 var rally_start_time := 0.0
 var rally_start_server := ""
 var rally_start_service_kind := ""
-var stats_file_path := "user://ai_match_stats.csv"
-var project_stats_file_path := "C:/Users/aho7/Documents/Codex/PowerSpikeStructuredBase/stats/ai_match_stats.csv"
 const GYM_SCENE := "res://scenes/environment/Gym_JP_A.tscn"
 const COURT_SCENE := "res://scenes/court/Court.tscn"
 const RENDER_TUNING_SCENE := "res://scenes/debug/RenderTuningPanel.tscn"
@@ -1030,54 +1028,25 @@ func _update_landing_resolution() -> void:
 		player_ai_serve_time = _now() + 1.0
 
 func _record_ai_match_point() -> void:
-	_store_stats_line(stats_file_path)
-	_store_stats_line(project_stats_file_path)
-
-func _store_stats_line(path: String) -> void:
-	if path == project_stats_file_path:
-		DirAccess.make_dir_recursive_absolute("C:/Users/aho7/Documents/Codex/PowerSpikeStructuredBase/stats")
-	var needs_header: bool = not FileAccess.file_exists(path)
-	var file := FileAccess.open(path, FileAccess.WRITE if needs_header else FileAccess.READ_WRITE)
-	if file == null:
+	var saved := StatsRecorder.record_point({
+		"timestamp": Time.get_datetime_string_from_system(),
+		"difficulty": String(_difficulty_profile()["label"]),
+		"mode": match_state.mode,
+		"server": rally_start_server,
+		"service": rally_start_service_kind,
+		"winner": landing_winner,
+		"reason": landing_reason,
+		"hits": match_state.rally_count,
+		"duration_s": "%.2f" % max(_now() - rally_start_time, 0.0),
+		"last_hitter": match_state.last_hitter_side,
+		"last_shot": match_state.last_shot_kind,
+		"score_kai_before": match_state.player_score,
+		"score_mina_before": match_state.opponent_score,
+		"sets_kai": match_state.player_sets,
+		"sets_mina": match_state.opponent_sets
+	})
+	if not saved:
 		status_text = "Stats non enregistrees"
-		return
-	file.seek_end()
-	if needs_header:
-		file.store_csv_line([
-			"timestamp",
-			"difficulty",
-			"mode",
-			"server",
-			"service",
-			"winner",
-			"reason",
-			"hits",
-			"duration_s",
-			"last_hitter",
-			"last_shot",
-			"score_kai_before",
-			"score_mina_before",
-			"sets_kai",
-			"sets_mina"
-		])
-	file.store_csv_line([
-		Time.get_datetime_string_from_system(),
-		String(_difficulty_profile()["label"]),
-		match_state.mode,
-		rally_start_server,
-		rally_start_service_kind,
-		landing_winner,
-		landing_reason,
-		str(match_state.rally_count),
-		"%.2f" % max(_now() - rally_start_time, 0.0),
-		match_state.last_hitter_side,
-		match_state.last_shot_kind,
-		str(match_state.player_score),
-		str(match_state.opponent_score),
-		str(match_state.player_sets),
-		str(match_state.opponent_sets)
-	])
-	file.close()
 
 func _reset_for_serve() -> void:
 	player.finish_hit()
@@ -1449,36 +1418,16 @@ func _clamp_camera_position(value: Vector3) -> Vector3:
 	)
 
 func _default_camera_presets() -> Array:
-	return [
-		{ "distance": 6.9, "height": 7.8, "focus": 0.45, "follow": 6.0, "follow_y": 1.0, "follow_side": 0.0, "look_z": 0.18, "follow_x": 0.0, "look_x": 0.0, "side": 0.0, "fov": 58.0 },
-		{ "distance": 8.2, "height": 8.6, "focus": 0.65, "follow": 5.2, "follow_y": 0.8, "follow_side": 0.15, "look_z": 0.12, "follow_x": 0.08, "look_x": 0.18, "side": 0.0, "fov": 54.0 },
-		{ "distance": 5.4, "height": 6.7, "focus": 0.35, "follow": 7.4, "follow_y": 1.0, "follow_side": 0.25, "look_z": 0.30, "follow_x": 0.12, "look_x": 0.25, "side": 0.0, "fov": 62.0 },
-		{ "distance": 5.7, "height": 3.35, "focus": 1.15, "follow": 6.0, "follow_y": 0.55, "follow_side": 0.28, "look_z": 0.28, "follow_x": 0.0, "look_x": 0.12, "side": 0.0, "fov": 50.0 },
-	]
+	return CameraPresetStore.default_presets()
 
 func _load_camera_presets() -> void:
-	camera_presets = _default_camera_presets()
-	var config := ConfigFile.new()
-	if config.load(camera_settings_path) == OK:
-		for i in range(camera_presets.size()):
-			var section := "camera_%d" % [i + 1]
-			var preset: Dictionary = camera_presets[i].duplicate()
-			for key in preset.keys():
-				preset[key] = float(config.get_value(section, key, preset[key]))
-			camera_presets[i] = preset
+	camera_presets = CameraPresetStore.load_presets(camera_settings_path)
 	camera_preset_slot = 0
 	camera_preset_slot = clamp(camera_preset_slot, 0, camera_presets.size() - 1)
 	active_camera_settings = (camera_presets[camera_preset_slot] as Dictionary).duplicate()
 
 func _write_camera_presets() -> void:
-	var config := ConfigFile.new()
-	config.set_value("camera", "selected", camera_preset_slot)
-	for i in range(camera_presets.size()):
-		var section := "camera_%d" % [i + 1]
-		var preset: Dictionary = camera_presets[i]
-		for key in preset.keys():
-			config.set_value(section, key, preset[key])
-	config.save(camera_settings_path)
+	CameraPresetStore.save_presets(camera_settings_path, camera_preset_slot, camera_presets)
 
 func _select_camera_preset(slot: int) -> void:
 	if slot < 0 or slot >= camera_presets.size():
@@ -1516,20 +1465,7 @@ func _save_camera_preset(slot: int, settings: Dictionary) -> void:
 	_update_hud()
 
 func _normalized_camera_settings(settings: Dictionary) -> Dictionary:
-	var defaults: Dictionary = _default_camera_presets()[0]
-	return {
-		"distance": clamp(float(settings.get("distance", defaults["distance"])), 4.0, 11.0),
-		"height": clamp(float(settings.get("height", defaults["height"])), 0.15, 10.5),
-		"focus": clamp(float(settings.get("focus", defaults["focus"])), 0.1, 2.4),
-		"follow": clamp(float(settings.get("follow", defaults["follow"])), 0.0, 12.0),
-		"follow_y": clamp(float(settings.get("follow_y", defaults["follow_y"])), 0.0, 1.0),
-		"follow_side": clamp(float(settings.get("follow_side", defaults["follow_side"])), 0.0, 1.0),
-		"look_z": clamp(float(settings.get("look_z", settings.get("follow_side", defaults["look_z"]))), 0.0, 1.0),
-		"follow_x": clamp(float(settings.get("follow_x", defaults["follow_x"])), 0.0, 1.0),
-		"look_x": clamp(float(settings.get("look_x", settings.get("follow_x", defaults["look_x"]))), 0.0, 1.0),
-		"side": clamp(float(settings.get("side", defaults["side"])), -3.0, 3.0),
-		"fov": clamp(float(settings.get("fov", defaults["fov"])), 38.0, 74.0),
-	}
+	return CameraPresetStore.normalized(settings)
 
 func _make_landing_marker() -> MeshInstance3D:
 	var node := MeshInstance3D.new()
