@@ -837,13 +837,7 @@ func _update_player_ai() -> void:
 					player_ai_action_time = _now() + 0.08
 
 func _choose_ai_shot() -> String:
-	var roll: float = randf()
-	var smash_bias: float = float(_difficulty_profile()["smash_bias"])
-	if roll < 0.46 - smash_bias:
-		return "lob"
-	if roll < 0.78 - smash_bias * 0.5:
-		return "drop"
-	return "smash"
+	return AIDecisionMaker.choose_opponent_shot(_difficulty_profile())
 
 func _ai_reach_bonus(character: PlayerCharacter) -> float:
 	var phase: float = shuttle.flight_phase()
@@ -865,113 +859,35 @@ func _difficulty_profile() -> Dictionary:
 func _apply_ai_difficulty_error(side: String, kind: String, target: Vector3) -> Vector3:
 	if side == "player" and not player_ai_enabled:
 		return target
-	if GameConfig.is_service_kind(kind):
-		return target
-	var profile: Dictionary = _difficulty_profile()
-	if randf() > float(profile["out_error_chance"]):
-		return target
-	var miss: Vector3 = target
-	var lane_sign: float = 1.0 if miss.z >= 0.0 else -1.0
-	if randf() < 0.55:
-		miss.z = lane_sign * (match_state.active_half_width() + randf_range(0.16, 0.55))
-	else:
-		var depth_sign: float = 1.0 if miss.x >= 0.0 else -1.0
-		miss.x = depth_sign * (GameConfig.COURT_LENGTH * 0.5 + randf_range(0.12, 0.45))
-	return miss
+	return AIDecisionMaker.apply_difficulty_error(kind, target, match_state.active_half_width(), _difficulty_profile())
 
 func _service_fault_type(side: String, kind: String) -> String:
-	if not GameConfig.is_service_kind(kind):
-		return ""
 	if side == "player" and not player_ai_enabled:
 		return ""
-	var profile: Dictionary = _difficulty_profile()
-	if randf() > float(profile["service_fault_chance"]):
-		return ""
-	var roll: float = randf()
-	if roll < float(profile["service_net_fault_share"]):
-		return "net"
-	if roll < float(profile["service_net_fault_share"]) + float(profile["service_out_fault_share"]):
-		return "out"
-	return "technique"
+	return AIDecisionMaker.service_fault_type(kind, _difficulty_profile())
 
 func _make_service_target_out(side: String, target: Vector3) -> Vector3:
-	var miss: Vector3 = target
-	var depth_sign: float = 1.0 if side == "player" else -1.0
-	if randf() < 0.65:
-		miss.x = depth_sign * (match_state.service_long_limit() + randf_range(0.18, 0.55))
-	else:
-		var lane_sign: float = 1.0 if miss.z >= 0.0 else -1.0
-		miss.z = lane_sign * (match_state.active_half_width() + randf_range(0.16, 0.45))
-	return miss
+	return AIDecisionMaker.make_service_target_out(side, target, match_state.service_long_limit(), match_state.active_half_width())
 
 func _should_force_net_fault(side: String, kind: String) -> bool:
-	if GameConfig.is_service_kind(kind):
-		return false
 	if side == "player" and not player_ai_enabled:
 		return false
-	if kind == "lob" or kind == "serve_lob":
-		return false
-	var profile: Dictionary = _difficulty_profile()
-	var chance: float = float(profile["net_fault_chance"])
-	if kind == "smash" or kind == "drive" or kind == "serve_drive":
-		chance *= 1.25
-	return randf() < chance
+	return AIDecisionMaker.should_force_net_fault(kind, _difficulty_profile())
 
 func _choose_player_ai_shot() -> String:
-	var roll: float = randf()
-	if roll < 0.46:
-		return "lob"
-	if roll < 0.78:
-		return "drop"
-	return "smash"
+	return AIDecisionMaker.choose_player_ai_shot()
 
 func _choose_player_ai_service_kind() -> String:
-	var roll: float = randf()
-	if roll < 0.54:
-		return "serve_short"
-	if roll < 0.84:
-		return "serve_lob"
-	return "serve_drive"
+	return AIDecisionMaker.choose_player_ai_service_kind()
 
 func _choose_player_ai_return_shot() -> String:
-	var service_type: String = match_state.last_shot_kind
-	if service_type == "serve_short":
-		var roll_short: float = randf()
-		return "drop" if roll_short < 0.42 else ("drive" if roll_short < 0.68 else "lob")
-	if service_type == "serve_lob":
-		var roll_long: float = randf()
-		return "lob" if roll_long < 0.42 else ("drop" if roll_long < 0.72 else "smash")
-	return "lob" if randf() < 0.62 else "drop"
+	return AIDecisionMaker.choose_player_ai_return_shot(match_state.last_shot_kind)
 
 func _choose_ai_service_kind() -> String:
-	var receiver_aggressiveness: float = _player_receiver_aggressiveness()
-	if receiver_aggressiveness > 0.75 and randf() < 0.62:
-		return "serve_drive"
-	if receiver_aggressiveness < 0.35 and randf() < 0.70:
-		return "serve_short"
-	var roll: float = randf()
-	if roll < 0.55:
-		return "serve_short"
-	if roll < 0.85:
-		return "serve_lob"
-	return "serve_drive"
+	return AIDecisionMaker.choose_opponent_service_kind(_player_receiver_aggressiveness())
 
 func _choose_ai_return_shot() -> String:
-	var service_type: String = match_state.last_shot_kind
-	var receiver_aggressiveness: float = opponent_receiver_aggressiveness
-	var reaction_time: float = randf_range(0.24, 0.58)
-	if service_type == "serve_short":
-		var roll_short: float = randf()
-		if receiver_aggressiveness > 0.68:
-			return "drop" if roll_short < 0.52 else ("drive" if roll_short < 0.86 else "lob")
-		return "drop" if roll_short < 0.36 else ("drive" if roll_short < 0.60 else "lob")
-	if service_type == "serve_lob":
-		var roll_long: float = randf()
-		return "lob" if roll_long < 0.40 else ("drop" if roll_long < 0.70 else "smash")
-	if reaction_time > 0.45 or receiver_aggressiveness > 0.74:
-		return "lob" if randf() < 0.70 else "drop"
-	var roll_flick: float = randf()
-	return "lob" if roll_flick < 0.35 else ("smash" if roll_flick < 0.70 else "drop")
+	return AIDecisionMaker.choose_opponent_return_shot(match_state.last_shot_kind, opponent_receiver_aggressiveness)
 
 func _player_receiver_aggressiveness() -> float:
 	if match_state.server_side != "opponent":
