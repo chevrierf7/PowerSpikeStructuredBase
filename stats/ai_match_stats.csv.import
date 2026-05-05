@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://cam1uqhm200h2"
+
+[deps]
+
+files=["res://stats/ai_match_stats.difficulty.translation", "res://stats/ai_match_stats.mode.translation", "res://stats/ai_match_stats.server.translation", "res://stats/ai_match_stats.service.translation", "res://stats/ai_match_stats.winner.translation", "res://stats/ai_match_stats.reason.translation", "res://stats/ai_match_stats.hits.translation", "res://stats/ai_match_stats.duration.translation", "res://stats/ai_match_stats.last.translation", "res://stats/ai_match_stats.last.translation", "res://stats/ai_match_stats.score.translation", "res://stats/ai_match_stats.score.translation", "res://stats/ai_match_stats.sets.translation", "res://stats/ai_match_stats.sets.translation"]
+
+source_file="res://stats/ai_match_stats.csv"
+dest_files=["res://stats/ai_match_stats.difficulty.translation", "res://stats/ai_match_stats.mode.translation", "res://stats/ai_match_stats.server.translation", "res://stats/ai_match_stats.service.translation", "res://stats/ai_match_stats.winner.translation", "res://stats/ai_match_stats.reason.translation", "res://stats/ai_match_stats.hits.translation", "res://stats/ai_match_stats.duration.translation", "res://stats/ai_match_stats.last.translation", "res://stats/ai_match_stats.last.translation", "res://stats/ai_match_stats.score.translation", "res://stats/ai_match_stats.score.translation", "res://stats/ai_match_stats.sets.translation", "res://stats/ai_match_stats.sets.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

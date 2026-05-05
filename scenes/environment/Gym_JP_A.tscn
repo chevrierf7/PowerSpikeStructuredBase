@@ -1,0 +1,17 @@
+[gd_scene load_steps=7 format=3 uid="uid://gym_jp_a_visual_shell"]
+
+[ext_resource type="Script" path="res://scripts/world/GymBuilder.gd" id="1_gym_builder"]
+[ext_resource type="Material" path="res://materials/gym_jp/MAT_Parquet.tres" id="2_parquet_mat"]
+[ext_resource type="Material" path="res://materials/gym_jp/MAT_RightWallTexture.tres" id="3_right_wall_mat"]
+[ext_resource type="Material" path="res://materials/gym_jp/MAT_LeftWallTexture.tres" id="4_left_wall_mat"]
+[ext_resource type="Material" path="res://materials/gym_jp/MAT_FrontWallTexture.tres" id="5_front_wall_mat"]
+[ext_resource type="Material" path="res://materials/gym_jp/MAT_RightSideWallTexture.tres" id="6_right_side_wall_mat"]
+
+[node name="Gym_JP_A" type="Node3D"]
+script = ExtResource("1_gym_builder")
+outer_floor_material = ExtResource("2_parquet_mat")
+back_wall_texture_material = ExtResource("3_right_wall_mat")
+left_wall_texture_material = ExtResource("4_left_wall_mat")
+front_wall_texture_material = ExtResource("5_front_wall_mat")
+right_side_wall_texture_material = ExtResource("6_right_side_wall_mat")
+preset_name = "JP_Wood_Classic"

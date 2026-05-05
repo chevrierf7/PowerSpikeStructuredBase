@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://racket_impact_fx"]
+
+[ext_resource type="Script" path="res://scripts/fx/RacketImpactFX.gd" id="1_racket_impact"]
+
+[node name="RacketImpactFX" type="Node3D"]
+script = ExtResource("1_racket_impact")

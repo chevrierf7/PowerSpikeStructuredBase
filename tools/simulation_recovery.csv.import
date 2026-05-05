@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://dlu2ot47hh2qa"
+
+[deps]
+
+files=["res://tools/simulation_recovery.hit.translation", "res://tools/simulation_recovery.hitter.translation", "res://tools/simulation_recovery.kind.translation", "res://tools/simulation_recovery.start.translation", "res://tools/simulation_recovery.start.translation", "res://tools/simulation_recovery.target.translation", "res://tools/simulation_recovery.target.translation", "res://tools/simulation_recovery.end.translation", "res://tools/simulation_recovery.end.translation", "res://tools/simulation_recovery.moved.translation", "res://tools/simulation_recovery.remaining.translation"]
+
+source_file="res://tools/simulation_recovery.csv"
+dest_files=["res://tools/simulation_recovery.hit.translation", "res://tools/simulation_recovery.hitter.translation", "res://tools/simulation_recovery.kind.translation", "res://tools/simulation_recovery.start.translation", "res://tools/simulation_recovery.start.translation", "res://tools/simulation_recovery.target.translation", "res://tools/simulation_recovery.target.translation", "res://tools/simulation_recovery.end.translation", "res://tools/simulation_recovery.end.translation", "res://tools/simulation_recovery.moved.translation", "res://tools/simulation_recovery.remaining.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

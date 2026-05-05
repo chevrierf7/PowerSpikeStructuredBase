@@ -1,0 +1,23 @@
+# Godot editor/cache files
+.git/
+.godot/
+.import/
+*.translation
+
+# Exported builds and generated logs
+exports/
+builds/
+*.log
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+__pycache__/
+*.pyc
+
+# Large/generated local backups
+backups/
+_archive/
