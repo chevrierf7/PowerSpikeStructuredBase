@@ -1215,9 +1215,12 @@ func _toggle_camera() -> void:
 		status_text = "Camera terrain"
 	_update_hud()
 
-func _start_game(menu_player_ai_enabled: bool) -> void:
+func _start_game(menu_settings: Dictionary) -> void:
 	match_state = MatchState.new()
-	player_ai_enabled = menu_player_ai_enabled
+	match_state.mode = String(menu_settings.get("mode", "singles"))
+	player_ai_enabled = bool(menu_settings.get("player_ai_enabled", false))
+	difficulty_level = String(menu_settings.get("difficulty", difficulty_level))
+	var start_camera_slot: int = int(menu_settings.get("camera_slot", 0))
 	player_ai_action_time = -1.0
 	player_ai_serve_time = -1.0
 	ai_serve_time = -1.0
@@ -1230,7 +1233,9 @@ func _start_game(menu_player_ai_enabled: bool) -> void:
 	status_text = "Pret a servir"
 	hud.hide_menus()
 	hud.set_player_ai(player_ai_enabled)
+	hud.set_difficulty(String(_difficulty_profile()["label"]))
 	_reset_for_serve()
+	_select_camera_preset(start_camera_slot)
 	_update_hud()
 	if player_ai_enabled and match_state.server_side == "player":
 		player_ai_serve_time = _now() + 0.9

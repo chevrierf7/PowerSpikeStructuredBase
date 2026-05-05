@@ -5,7 +5,7 @@ signal serve_pressed
 signal lob_pressed
 signal drop_pressed
 signal smash_pressed
-signal start_game(player_ai_enabled: bool)
+signal start_game(settings: Dictionary)
 signal resume_requested
 signal free_camera_requested
 signal main_menu_requested
@@ -26,6 +26,10 @@ var status_label := Label.new()
 var pause_label := Label.new()
 var main_menu_overlay := Control.new()
 var pause_menu_overlay := Control.new()
+var player_control_option := OptionButton.new()
+var difficulty_option := OptionButton.new()
+var match_mode_option := OptionButton.new()
+var start_camera_option := OptionButton.new()
 var timing_label := Label.new()
 var aim_label := Label.new()
 var hint_label := Label.new()
@@ -180,9 +184,9 @@ func _build_main_menu(root: Control) -> void:
 	panel.anchor_right = 0.5
 	panel.anchor_bottom = 0.5
 	panel.offset_left = -210.0
-	panel.offset_top = -190.0
+	panel.offset_top = -262.0
 	panel.offset_right = 210.0
-	panel.offset_bottom = 190.0
+	panel.offset_bottom = 286.0
 	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.07, 0.08, 0.09, 0.94), Color(1, 1, 1, 0.18), 8))
 	main_menu_overlay.add_child(panel)
 	var title := Label.new()
@@ -201,13 +205,41 @@ func _build_main_menu(root: Control) -> void:
 	subtitle.add_theme_font_size_override("font_size", 17)
 	subtitle.add_theme_color_override("font_color", Color(0.86, 0.90, 0.88))
 	panel.add_child(subtitle)
-	panel.add_child(_menu_button("Jouer", Vector2(88, 132), func() -> void: start_game.emit(false)))
-	panel.add_child(_menu_button("Demo IA", Vector2(88, 188), func() -> void: start_game.emit(true)))
-	panel.add_child(_menu_button("Options", Vector2(88, 244), func() -> void:
+	_add_menu_option(panel, "Kai", player_control_option, Vector2(52, 126), ["Joueur", "IA"])
+	_add_menu_option(panel, "Niveau", difficulty_option, Vector2(52, 184), ["Loisir", "Club", "Elite"])
+	difficulty_option.select(1)
+	_add_menu_option(panel, "Mode", match_mode_option, Vector2(52, 242), ["Simple", "Double"])
+	_add_menu_option(panel, "Camera", start_camera_option, Vector2(52, 300), ["Terrain", "Dos joueur"])
+	panel.add_child(_menu_button("Lancer match", Vector2(88, 360), func() -> void: start_game.emit(get_main_menu_settings())))
+	panel.add_child(_menu_button("Options", Vector2(88, 416), func() -> void:
 		debug_panel.visible = true
 		debug_panel.move_to_front()
 	))
-	panel.add_child(_menu_button("Quitter", Vector2(88, 300), func() -> void: quit_requested.emit()))
+	panel.add_child(_menu_button("Quitter", Vector2(88, 472), func() -> void: quit_requested.emit()))
+
+func get_main_menu_settings() -> Dictionary:
+	return {
+		"player_ai_enabled": player_control_option.selected == 1,
+		"difficulty": ["loisir", "club", "elite"][difficulty_option.selected],
+		"mode": "doubles" if match_mode_option.selected == 1 else "singles",
+		"camera_slot": 3 if start_camera_option.selected == 1 else 0
+	}
+
+func _add_menu_option(root: Control, label_text: String, option: OptionButton, pos: Vector2, items: Array[String]) -> void:
+	var label := Label.new()
+	label.text = label_text
+	label.position = pos
+	label.size = Vector2(120, 26)
+	label.add_theme_font_size_override("font_size", 16)
+	label.add_theme_color_override("font_color", Color(0.86, 0.90, 0.88))
+	root.add_child(label)
+	option.position = pos + Vector2(118, -6)
+	option.size = Vector2(174, 34)
+	option.add_theme_font_size_override("font_size", 15)
+	option.add_theme_stylebox_override("normal", _button_style(Color(0.12, 0.14, 0.16, 0.96)))
+	for item in items:
+		option.add_item(item)
+	root.add_child(option)
 
 func _build_pause_menu(root: Control) -> void:
 	pause_menu_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
