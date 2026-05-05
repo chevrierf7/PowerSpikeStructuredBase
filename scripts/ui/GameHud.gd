@@ -26,10 +26,22 @@ var status_label := Label.new()
 var pause_label := Label.new()
 var main_menu_overlay := Control.new()
 var pause_menu_overlay := Control.new()
+var main_menu_background := TextureRect.new()
+var main_menu_logo := TextureRect.new()
+var main_menu_panel := Control.new()
+var main_settings_panel := Panel.new()
+var main_dark_overlay := ColorRect.new()
+var main_start_button := Button.new()
+var match_settings_button := Button.new()
+var menu_gear_button := Button.new()
+var menu_fade_rect := ColorRect.new()
+var ui_click_player := AudioStreamPlayer.new()
+var player_name_option := OptionButton.new()
 var player_control_option := OptionButton.new()
 var difficulty_option := OptionButton.new()
 var match_mode_option := OptionButton.new()
 var start_camera_option := OptionButton.new()
+var terrain_option := OptionButton.new()
 var timing_label := Label.new()
 var aim_label := Label.new()
 var hint_label := Label.new()
@@ -71,6 +83,8 @@ func _ready() -> void:
 	_build_mobile_controls(root)
 	_build_main_menu(root)
 	_build_pause_menu(root)
+	ui_click_player.stream = load("res://assets/ui/ui_click.wav")
+	add_child(ui_click_player)
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -120,6 +134,9 @@ func show_main_menu() -> void:
 	action_panel.visible = false
 	camera_panel.visible = false
 	debug_panel.visible = false
+	menu_fade_rect.color = Color(0.0, 0.0, 0.0, 0.0)
+	if main_menu_panel.get_parent() != null:
+		_play_main_menu_entry()
 
 func hide_menus() -> void:
 	main_menu_overlay.visible = false
@@ -173,62 +190,279 @@ func _build_labels(root: Control) -> void:
 	root.add_child(hint_label)
 
 func _build_main_menu(root: Control) -> void:
+	main_menu_overlay.name = "MainMenu"
 	main_menu_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.add_child(main_menu_overlay)
+	var background_layer := Control.new()
+	background_layer.name = "BackgroundLayer"
+	background_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	background_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_menu_overlay.add_child(background_layer)
+	main_menu_background.name = "Background"
+	main_menu_background.set_anchors_preset(Control.PRESET_FULL_RECT)
+	main_menu_background.texture = load("res://assets/ui/menu_background.png")
+	main_menu_background.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	main_menu_background.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	main_menu_background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	background_layer.add_child(main_menu_background)
 	var backdrop := ColorRect.new()
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.02, 0.025, 0.028, 0.72)
+	backdrop.color = Color(0.02, 0.025, 0.035, 0.04)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	main_menu_overlay.add_child(backdrop)
-	var panel := Panel.new()
-	panel.anchor_left = 0.5
-	panel.anchor_top = 0.5
-	panel.anchor_right = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = -210.0
-	panel.offset_top = -262.0
-	panel.offset_right = 210.0
-	panel.offset_bottom = 286.0
-	panel.add_theme_stylebox_override("panel", _panel_style(Color(0.07, 0.08, 0.09, 0.94), Color(1, 1, 1, 0.18), 8))
-	main_menu_overlay.add_child(panel)
-	var title := Label.new()
-	title.text = "Power Spike"
-	title.position = Vector2(34, 30)
-	title.size = Vector2(352, 46)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 36)
-	title.add_theme_color_override("font_color", Color(1.0, 0.93, 0.70))
-	panel.add_child(title)
-	var subtitle := Label.new()
-	subtitle.text = "Badminton arcade"
-	subtitle.position = Vector2(34, 78)
-	subtitle.size = Vector2(352, 28)
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 17)
-	subtitle.add_theme_color_override("font_color", Color(0.86, 0.90, 0.88))
-	panel.add_child(subtitle)
-	_add_menu_option(panel, "Kai", player_control_option, Vector2(52, 126), ["Joueur", "IA"])
-	_add_menu_option(panel, "Niveau", difficulty_option, Vector2(52, 184), ["Loisir", "Club", "Elite"])
-	difficulty_option.select(1)
-	_add_menu_option(panel, "Mode", match_mode_option, Vector2(52, 242), ["Simple", "Double"])
-	_add_menu_option(panel, "Camera", start_camera_option, Vector2(52, 300), ["Terrain", "Dos joueur"])
-	_load_match_setup_settings()
-	panel.add_child(_menu_button("Lancer match", Vector2(88, 360), func() -> void:
-		var settings := get_main_menu_settings()
-		_save_match_setup_settings(settings)
-		start_game.emit(settings)
-	))
-	panel.add_child(_menu_button("Options", Vector2(88, 416), func() -> void:
+	main_menu_logo.name = "Logo"
+	main_menu_logo.anchor_left = 0.5
+	main_menu_logo.anchor_top = 0.0
+	main_menu_logo.anchor_right = 0.5
+	main_menu_logo.anchor_bottom = 0.0
+	main_menu_logo.offset_left = -800.0
+	main_menu_logo.offset_top = 92.0
+	main_menu_logo.offset_right = 800.0
+	main_menu_logo.offset_bottom = 502.0
+	main_menu_logo.texture = load("res://assets/ui/shuttle_rush_logo.png")
+	main_menu_logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	main_menu_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	main_menu_logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_menu_logo.pivot_offset = Vector2(800, 205)
+	main_menu_overlay.add_child(main_menu_logo)
+	main_dark_overlay.name = "DarkOverlay"
+	main_dark_overlay.anchor_left = 0.5
+	main_dark_overlay.anchor_top = 0.0
+	main_dark_overlay.anchor_right = 0.5
+	main_dark_overlay.anchor_bottom = 0.0
+	main_dark_overlay.offset_left = -500.0
+	main_dark_overlay.offset_top = 455.0
+	main_dark_overlay.offset_right = 500.0
+	main_dark_overlay.offset_bottom = 835.0
+	main_dark_overlay.color = Color(0.0, 0.018, 0.045, 0.22)
+	main_dark_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_menu_overlay.add_child(main_dark_overlay)
+	main_menu_panel.name = "MenuPanel"
+	main_menu_panel.anchor_left = 0.5
+	main_menu_panel.anchor_top = 0.0
+	main_menu_panel.anchor_right = 0.5
+	main_menu_panel.anchor_bottom = 0.0
+	main_menu_panel.offset_left = -380.0
+	main_menu_panel.offset_top = 510.0
+	main_menu_panel.offset_right = 380.0
+	main_menu_panel.offset_bottom = 850.0
+	main_menu_overlay.add_child(main_menu_panel)
+	menu_gear_button.name = "OptionsGear"
+	menu_gear_button.anchor_left = 1.0
+	menu_gear_button.anchor_top = 0.0
+	menu_gear_button.anchor_right = 1.0
+	menu_gear_button.anchor_bottom = 0.0
+	menu_gear_button.offset_left = -78.0
+	menu_gear_button.offset_top = 26.0
+	menu_gear_button.offset_right = -26.0
+	menu_gear_button.offset_bottom = 78.0
+	menu_gear_button.text = "⚙"
+	menu_gear_button.add_theme_font_size_override("font_size", 27)
+	menu_gear_button.add_theme_color_override("font_color", Color(0.88, 0.97, 1.0))
+	menu_gear_button.add_theme_stylebox_override("normal", _gear_button_style(Color(0.0, 0.02, 0.04, 0.25), Color(0.32, 0.78, 1.0, 0.24), 1))
+	menu_gear_button.add_theme_stylebox_override("hover", _gear_button_style(Color(0.02, 0.10, 0.16, 0.42), Color(0.55, 0.92, 1.0, 0.72), 7))
+	menu_gear_button.add_theme_stylebox_override("pressed", _gear_button_style(Color(0.0, 0.04, 0.08, 0.56), Color(0.35, 0.82, 1.0, 0.55), 3))
+	menu_gear_button.pressed.connect(func() -> void:
 		debug_panel.visible = true
 		debug_panel.move_to_front()
-	))
-	panel.add_child(_menu_button("Quitter", Vector2(88, 472), func() -> void: quit_requested.emit()))
+	)
+	_wire_arcade_button_fx(menu_gear_button, 1.06, 0.94)
+	main_menu_overlay.add_child(menu_gear_button)
+	var selectors_grid := Control.new()
+	selectors_grid.name = "SelectorsGrid"
+	selectors_grid.position = Vector2(28, 24)
+	selectors_grid.size = Vector2(692, 132)
+	main_settings_panel.name = "SettingsPanel"
+	main_settings_panel.position = Vector2(0, -165)
+	main_settings_panel.size = Vector2(760, 178)
+	main_settings_panel.visible = false
+	main_settings_panel.modulate = Color(1, 1, 1, 0)
+	main_settings_panel.add_theme_stylebox_override("panel", _arcade_panel_style())
+	main_menu_panel.add_child(main_settings_panel)
+	main_settings_panel.add_child(selectors_grid)
+	_add_menu_option(selectors_grid, "Joueur", player_name_option, Vector2(0, 0), ["Kai"])
+	player_name_option.disabled = true
+	_add_menu_option(selectors_grid, "IA", player_control_option, Vector2(238, 0), ["Non", "Oui"])
+	_add_menu_option(selectors_grid, "Niveau", difficulty_option, Vector2(476, 0), ["Loisir", "Club", "Elite"])
+	difficulty_option.select(1)
+	_add_menu_option(selectors_grid, "Mode", match_mode_option, Vector2(0, 72), ["Simple", "Double"])
+	_add_menu_option(selectors_grid, "Camera", start_camera_option, Vector2(238, 72), ["Terrain", "Dos joueur"])
+	_add_menu_option(selectors_grid, "Terrain", terrain_option, Vector2(476, 72), ["Gymnase", "Arena"])
+	_load_match_setup_settings()
+	main_start_button = _menu_button("COMMENCER", Vector2(200, 0), _start_match_from_menu)
+	main_start_button.name = "StartButton"
+	main_start_button.size = Vector2(360, 70)
+	main_start_button.add_theme_font_size_override("font_size", 30)
+	main_start_button.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0))
+	main_start_button.add_theme_stylebox_override("normal", _start_button_style(Color(0.02, 0.48, 0.95, 0.98), Color(0.35, 0.94, 1.0, 0.78), 7))
+	main_start_button.add_theme_stylebox_override("hover", _start_button_style(Color(0.03, 0.66, 1.0, 1.0), Color(0.68, 1.0, 1.0, 0.95), 12))
+	main_start_button.add_theme_stylebox_override("pressed", _start_button_style(Color(0.01, 0.27, 0.62, 1.0), Color(0.20, 0.82, 1.0, 0.80), 4))
+	_wire_arcade_button_fx(main_start_button, 1.04, 0.97)
+	main_menu_panel.add_child(main_start_button)
+	var secondary_buttons := Control.new()
+	secondary_buttons.name = "SecondaryButtons"
+	secondary_buttons.position = Vector2(240, 86)
+	secondary_buttons.size = Vector2(280, 44)
+	main_menu_panel.add_child(secondary_buttons)
+	match_settings_button = _menu_button("RÉGLAGE PARTIE", Vector2(0, 0), _toggle_match_settings_panel)
+	match_settings_button.name = "MatchSettingsButton"
+	match_settings_button.size = Vector2(280, 44)
+	match_settings_button.add_theme_font_size_override("font_size", 16)
+	match_settings_button.add_theme_stylebox_override("normal", _selector_button_style(Color(0.025, 0.045, 0.075, 0.70), Color(0.32, 0.80, 1.0, 0.46), 2))
+	match_settings_button.add_theme_stylebox_override("hover", _selector_button_style(Color(0.035, 0.085, 0.135, 0.88), Color(0.50, 0.94, 1.0, 0.76), 5))
+	match_settings_button.add_theme_stylebox_override("pressed", _selector_button_style(Color(0.015, 0.035, 0.065, 0.95), Color(0.28, 0.72, 1.0, 0.62), 1))
+	_wire_arcade_button_fx(match_settings_button, 1.025, 0.98)
+	secondary_buttons.add_child(match_settings_button)
+	var fx_layer := Control.new()
+	fx_layer.name = "FXLayer"
+	fx_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_menu_overlay.add_child(fx_layer)
+	_add_menu_speed_lines(fx_layer, true)
+	_add_menu_light_particles(fx_layer)
+	menu_fade_rect.name = "FadeOut"
+	menu_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	menu_fade_rect.color = Color(0.0, 0.0, 0.0, 0.0)
+	menu_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	main_menu_overlay.add_child(menu_fade_rect)
+	_animate_main_menu()
+	_play_main_menu_entry()
+
+func _start_match_from_menu() -> void:
+	main_start_button.disabled = true
+	ui_click_player.play()
+	var settings := get_main_menu_settings()
+	_save_match_setup_settings(settings)
+	var tween := create_tween()
+	tween.tween_property(menu_fade_rect, "color", Color(0.0, 0.0, 0.0, 1.0), 0.26)
+	await tween.finished
+	start_game.emit(settings)
+	menu_fade_rect.color = Color(0.0, 0.0, 0.0, 0.0)
+	main_start_button.disabled = false
+
+func _toggle_match_settings_panel() -> void:
+	if main_settings_panel.visible:
+		_hide_match_settings_panel()
+	else:
+		_show_match_settings_panel()
+
+func _show_match_settings_panel() -> void:
+	match_settings_button.text = "FERMER RÉGLAGES"
+	main_settings_panel.visible = true
+	main_settings_panel.modulate = Color(1, 1, 1, 0)
+	main_settings_panel.position.y = -145.0
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(main_settings_panel, "modulate", Color.WHITE, 0.18).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(main_settings_panel, "position:y", -165.0, 0.20).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func _hide_match_settings_panel() -> void:
+	match_settings_button.text = "RÉGLAGE PARTIE"
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(main_settings_panel, "modulate", Color(1, 1, 1, 0), 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_property(main_settings_panel, "position:y", -145.0, 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	await tween.finished
+	main_settings_panel.visible = false
+	main_settings_panel.position.y = -165.0
+
+func _animate_main_menu() -> void:
+	var logo_tween := create_tween()
+	logo_tween.set_loops()
+	logo_tween.tween_property(main_menu_logo, "scale", Vector2(1.03, 1.03), 1.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	logo_tween.tween_property(main_menu_logo, "scale", Vector2.ONE, 1.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	var background_tween := create_tween()
+	background_tween.set_loops()
+	background_tween.tween_property(main_menu_background, "scale", Vector2(1.035, 1.035), 8.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	background_tween.tween_property(main_menu_background, "scale", Vector2.ONE, 8.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+func _play_main_menu_entry() -> void:
+	main_menu_logo.modulate = Color(1, 1, 1, 0)
+	main_menu_panel.modulate = Color(1, 1, 1, 0)
+	main_dark_overlay.modulate = Color(1, 1, 1, 0)
+	main_settings_panel.visible = false
+	main_settings_panel.modulate = Color(1, 1, 1, 0)
+	match_settings_button.text = "RÉGLAGE PARTIE"
+	main_menu_logo.position.y -= 18.0
+	main_menu_panel.position.y += 14.0
+	var tween := create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(main_menu_logo, "modulate", Color.WHITE, 0.28).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(main_menu_logo, "position:y", main_menu_logo.position.y + 18.0, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(main_dark_overlay, "modulate", Color.WHITE, 0.22).set_delay(0.06)
+	tween.tween_property(main_menu_panel, "modulate", Color.WHITE, 0.24).set_delay(0.10)
+	tween.tween_property(main_menu_panel, "position:y", main_menu_panel.position.y - 14.0, 0.24).set_delay(0.10).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+func _add_menu_speed_lines(root: Control, front: bool) -> void:
+	var lines := [
+		[Vector2(-120, 250), Vector2(150, 198)],
+		[Vector2(1850, 130), Vector2(2110, 76)],
+		[Vector2(-130, 835), Vector2(160, 770)],
+		[Vector2(1860, 830), Vector2(2115, 770)]
+	]
+	for index in lines.size():
+		var line := Line2D.new()
+		line.width = 3.0 if front else 2.0
+		line.default_color = Color(0.24, 0.92, 1.0, 0.20 if front else 0.11)
+		line.material = _additive_canvas_material()
+		line.add_point(lines[index][0])
+		line.add_point(lines[index][1])
+		root.add_child(line)
+
+func _add_menu_light_particles(root: Control) -> void:
+	var particles := GPUParticles2D.new()
+	particles.name = "LightParticles"
+	particles.position = Vector2(960, 560)
+	particles.amount = 90
+	particles.lifetime = 2.4
+	particles.preprocess = 2.4
+	particles.emitting = true
+	particles.material = _additive_canvas_material()
+	var process := ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = Vector3(820, 300, 1)
+	process.direction = Vector3(0, -1, 0)
+	process.spread = 180.0
+	process.initial_velocity_min = 10.0
+	process.initial_velocity_max = 34.0
+	process.gravity = Vector3(0, -8.0, 0)
+	process.scale_min = 1.0
+	process.scale_max = 3.2
+	process.color = Color(0.55, 0.95, 1.0, 0.34)
+	particles.process_material = process
+	root.add_child(particles)
+
+func _additive_canvas_material() -> CanvasItemMaterial:
+	var material := CanvasItemMaterial.new()
+	material.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	return material
+
+func _wire_arcade_button_fx(button: Button, hover_scale := 1.045, press_scale := 0.96) -> void:
+	button.pivot_offset = button.size * 0.5
+	button.mouse_entered.connect(func() -> void:
+		var tween := create_tween()
+		tween.tween_property(button, "scale", Vector2(hover_scale, hover_scale), 0.09)
+	)
+	button.mouse_exited.connect(func() -> void:
+		var tween := create_tween()
+		tween.tween_property(button, "scale", Vector2.ONE, 0.10)
+	)
+	button.button_down.connect(func() -> void:
+		var tween := create_tween()
+		tween.tween_property(button, "scale", Vector2(press_scale, press_scale), 0.05)
+	)
+	button.button_up.connect(func() -> void:
+		var tween := create_tween()
+		tween.tween_property(button, "scale", Vector2(hover_scale, hover_scale), 0.07)
+	)
 
 func get_main_menu_settings() -> Dictionary:
 	return {
 		"player_ai_enabled": player_control_option.selected == 1,
 		"difficulty": ["loisir", "club", "elite"][difficulty_option.selected],
 		"mode": "doubles" if match_mode_option.selected == 1 else "singles",
-		"camera_slot": 3 if start_camera_option.selected == 1 else 0
+		"camera_slot": 3 if start_camera_option.selected == 1 else 0,
+		"terrain": "arena" if terrain_option.selected == 1 else "gymnase"
 	}
 
 func _load_match_setup_settings() -> void:
@@ -242,6 +476,8 @@ func _load_match_setup_settings() -> void:
 	match_mode_option.select(1 if mode == "doubles" else 0)
 	var camera_slot := int(config.get_value("match", "camera_slot", 0))
 	start_camera_option.select(1 if camera_slot == 3 else 0)
+	var terrain := String(config.get_value("match", "terrain", "gymnase"))
+	terrain_option.select(1 if terrain == "arena" else 0)
 
 func _save_match_setup_settings(settings: Dictionary) -> void:
 	var config := ConfigFile.new()
@@ -249,23 +485,36 @@ func _save_match_setup_settings(settings: Dictionary) -> void:
 	config.set_value("match", "difficulty", String(settings.get("difficulty", "club")))
 	config.set_value("match", "mode", String(settings.get("mode", "singles")))
 	config.set_value("match", "camera_slot", int(settings.get("camera_slot", 0)))
+	config.set_value("match", "terrain", String(settings.get("terrain", "gymnase")))
 	config.save(match_setup_settings_path)
 
 func _add_menu_option(root: Control, label_text: String, option: OptionButton, pos: Vector2, items: Array[String]) -> void:
+	var field := Panel.new()
+	field.name = "%sField" % label_text
+	field.position = pos
+	field.size = Vector2(214, 58)
+	field.add_theme_stylebox_override("panel", _selector_shell_style())
+	root.add_child(field)
 	var label := Label.new()
 	label.text = label_text
-	label.position = pos
-	label.size = Vector2(120, 26)
-	label.add_theme_font_size_override("font_size", 16)
-	label.add_theme_color_override("font_color", Color(0.86, 0.90, 0.88))
-	root.add_child(label)
-	option.position = pos + Vector2(118, -6)
-	option.size = Vector2(174, 34)
+	label.position = Vector2(12, 7)
+	label.size = Vector2(78, 20)
+	label.add_theme_font_size_override("font_size", 13)
+	label.add_theme_color_override("font_color", Color(0.92, 0.93, 0.88))
+	label.add_theme_color_override("font_shadow_color", Color(0.0, 0.08, 0.14, 0.80))
+	label.add_theme_constant_override("shadow_offset_x", 1)
+	label.add_theme_constant_override("shadow_offset_y", 1)
+	field.add_child(label)
+	option.position = Vector2(86, 8)
+	option.size = Vector2(116, 42)
 	option.add_theme_font_size_override("font_size", 15)
-	option.add_theme_stylebox_override("normal", _button_style(Color(0.12, 0.14, 0.16, 0.96)))
+	option.add_theme_stylebox_override("normal", _selector_button_style(Color(0.015, 0.040, 0.075, 0.95), Color(0.18, 0.72, 0.96, 0.48), 2))
+	option.add_theme_stylebox_override("hover", _selector_button_style(Color(0.025, 0.085, 0.145, 0.98), Color(0.45, 0.92, 1.0, 0.88), 5))
+	option.add_theme_stylebox_override("pressed", _selector_button_style(Color(0.01, 0.030, 0.065, 1.0), Color(0.32, 0.80, 1.0, 0.70), 1))
+	option.add_theme_color_override("font_color", Color(0.96, 0.99, 1.0))
 	for item in items:
 		option.add_item(item)
-	root.add_child(option)
+	field.add_child(option)
 
 func _build_pause_menu(root: Control) -> void:
 	pause_menu_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -305,9 +554,9 @@ func _menu_button(text: String, pos: Vector2, callback: Callable) -> Button:
 	button.position = pos
 	button.size = Vector2(244, 42)
 	button.add_theme_font_size_override("font_size", 18)
-	button.add_theme_stylebox_override("normal", _button_style(Color(0.12, 0.14, 0.16, 0.96)))
-	button.add_theme_stylebox_override("hover", _button_style(Color(0.17, 0.22, 0.25, 0.98)))
-	button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.32, 1.0)))
+	button.add_theme_stylebox_override("normal", _selector_button_style(Color(0.045, 0.060, 0.085, 0.90), Color(0.28, 0.70, 0.92, 0.30), 2))
+	button.add_theme_stylebox_override("hover", _selector_button_style(Color(0.060, 0.095, 0.135, 0.96), Color(0.45, 0.90, 1.0, 0.62), 4))
+	button.add_theme_stylebox_override("pressed", _selector_button_style(Color(0.025, 0.040, 0.065, 1.0), Color(0.25, 0.70, 0.95, 0.48), 1))
 	button.pressed.connect(callback)
 	return button
 
@@ -661,6 +910,67 @@ func _panel_style(fill: Color, border: Color, radius: int) -> StyleBoxFlat:
 	style.border_color = border
 	style.set_border_width_all(2)
 	style.set_corner_radius_all(radius)
+	return style
+
+func _arcade_panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.015, 0.035, 0.070, 0.82)
+	style.border_color = Color(0.36, 0.88, 1.0, 0.72)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(10)
+	style.content_margin_left = 28
+	style.content_margin_right = 28
+	style.content_margin_top = 24
+	style.content_margin_bottom = 24
+	style.shadow_color = Color(0.0, 0.12, 0.22, 0.52)
+	style.shadow_size = 18
+	style.shadow_offset = Vector2(0, 8)
+	return style
+
+func _selector_shell_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.0, 0.022, 0.050, 0.58)
+	style.border_color = Color(0.30, 0.80, 1.0, 0.28)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(7)
+	style.shadow_color = Color(0.0, 0.08, 0.15, 0.28)
+	style.shadow_size = 8
+	style.shadow_offset = Vector2(0, 3)
+	return style
+
+func _selector_button_style(fill: Color, border: Color, shadow: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(6)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.shadow_color = Color(0.10, 0.72, 1.0, 0.28)
+	style.shadow_size = shadow
+	return style
+
+func _gear_button_style(fill: Color, border: Color, shadow: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(26)
+	style.shadow_color = Color(0.20, 0.82, 1.0, 0.35)
+	style.shadow_size = shadow
+	return style
+
+func _start_button_style(fill: Color, border: Color, shadow: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(6)
+	style.content_margin_left = 18
+	style.content_margin_right = 18
+	style.shadow_color = Color(0.20, 0.85, 1.0, 0.45)
+	style.shadow_size = shadow
+	style.shadow_offset = Vector2(0, 0)
 	return style
 
 func _button_style(fill: Color) -> StyleBoxFlat:
