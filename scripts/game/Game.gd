@@ -492,60 +492,60 @@ func _shuttle_visual_settings_for_shot(shot_kind: String) -> Dictionary:
 	match shot_kind:
 		"smash":
 			return {
-				"trail_color": Color(1.0, 0.36, 0.12, 0.68),
-				"trail_limit": 14,
+				"trail_color": Color(1.0, 0.30, 0.08, 0.84),
+				"trail_limit": 18,
 				"speed_lines": {
 					"enabled": true,
-					"opacity": 0.82,
-					"main_length": 1.08,
-					"width": 0.030,
-					"color": Color(1.0, 0.46, 0.18, 1.0)
+					"opacity": 0.98,
+					"main_length": 1.42,
+					"width": 0.040,
+					"color": Color(1.0, 0.38, 0.12, 1.0)
 				}
 			}
 		"drive", "serve_drive":
 			return {
-				"trail_color": Color(1.0, 0.82, 0.22, 0.62),
-				"trail_limit": 12,
+				"trail_color": Color(1.0, 0.84, 0.16, 0.78),
+				"trail_limit": 16,
 				"speed_lines": {
 					"enabled": true,
-					"opacity": 0.68,
-					"main_length": 0.86,
-					"width": 0.024,
-					"color": Color(1.0, 0.86, 0.32, 1.0)
+					"opacity": 0.86,
+					"main_length": 1.10,
+					"width": 0.032,
+					"color": Color(1.0, 0.88, 0.22, 1.0)
 				}
 			}
 		"drop", "serve_short":
 			return {
-				"trail_color": Color(0.46, 1.0, 0.66, 0.58),
-				"trail_limit": 7,
+				"trail_color": Color(0.36, 1.0, 0.58, 0.74),
+				"trail_limit": 10,
 				"speed_lines": {
 					"enabled": true,
-					"opacity": 0.46,
-					"main_length": 0.36,
-					"width": 0.018,
-					"color": Color(0.58, 1.0, 0.70, 1.0)
+					"opacity": 0.68,
+					"main_length": 0.54,
+					"width": 0.024,
+					"color": Color(0.44, 1.0, 0.62, 1.0)
 				}
 			}
 		"lob", "serve_lob":
 			return {
-				"trail_color": Color(0.52, 0.78, 1.0, 0.56),
-				"trail_limit": 18,
+				"trail_color": Color(0.44, 0.74, 1.0, 0.72),
+				"trail_limit": 24,
 				"speed_lines": {
 					"enabled": true,
-					"opacity": 0.50,
-					"main_length": 0.68,
-					"width": 0.020,
-					"color": Color(0.64, 0.86, 1.0, 1.0)
+					"opacity": 0.68,
+					"main_length": 0.94,
+					"width": 0.026,
+					"color": Color(0.54, 0.82, 1.0, 1.0)
 				}
 			}
 	return {
-		"trail_color": Color(1.0, 0.92, 0.36, 0.56),
-		"trail_limit": 14,
+		"trail_color": Color(1.0, 0.92, 0.36, 0.70),
+		"trail_limit": 18,
 		"speed_lines": {
 			"enabled": true,
-			"opacity": 0.60,
-			"main_length": 0.72,
-			"width": 0.022,
+			"opacity": 0.76,
+			"main_length": 0.96,
+			"width": 0.028,
 			"color": Color(1.0, 0.94, 0.55, 1.0)
 		}
 	}
