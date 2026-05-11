@@ -1,9 +1,7 @@
-[gd_scene load_steps=3 format=3 uid="uid://court_modular_gameplay_surface"]
+[gd_scene load_steps=2 format=3 uid="uid://court_modular_gameplay_surface"]
 
 [ext_resource type="Script" path="res://scripts/world/CourtBuilder.gd" id="1_court_builder"]
-[ext_resource type="Material" path="res://materials/court/MAT_CourtArtificial.tres" id="2_court_artificial"]
 
 [node name="Court" type="Node3D"]
 script = ExtResource("1_court_builder")
-surface_material = ExtResource("2_court_artificial")
 preset_name = "JP_Orange_Arcade"

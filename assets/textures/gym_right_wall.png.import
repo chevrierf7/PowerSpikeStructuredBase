@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://d0p6s1n4w8y2a"
 path.s3tc="res://.godot/imported/gym_right_wall.png-1e4eaf974364c925024be828cc2f5538.s3tc.ctex"
+path.etc2="res://.godot/imported/gym_right_wall.png-1e4eaf974364c925024be828cc2f5538.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/textures/gym_right_wall.png"
-dest_files=["res://.godot/imported/gym_right_wall.png-1e4eaf974364c925024be828cc2f5538.s3tc.ctex"]
+dest_files=["res://.godot/imported/gym_right_wall.png-1e4eaf974364c925024be828cc2f5538.s3tc.ctex", "res://.godot/imported/gym_right_wall.png-1e4eaf974364c925024be828cc2f5538.etc2.ctex"]
 
 [params]
 

@@ -40,8 +40,6 @@ func _build_room() -> void:
 	var ceiling_mat := _mat(ceiling_material, gym["ceiling"])
 	var floor := _add_box("JPWoodFloor", Vector3(0, -0.055, 0), Vector3(22.0, 0.04, 15.2), floor_mat)
 	floor.layers = 3
-	for z in [-4.6, -1.6, 1.6, 4.6]:
-		_add_box("FloorPlankLine", Vector3(0, -0.029, z), Vector3(22.0, 0.008, 0.025), CourtPreset.material(Color(0.50, 0.34, 0.20, 0.42)))
 	for x in [-10.9, 10.9]:
 		_add_box("ShortWallWood", Vector3(x, 0.85, 0), Vector3(0.18, 1.7, 15.2), _wall_mat(wall_material, gym["wood"]))
 		_add_box("ShortWallUpper", Vector3(x, 3.45, 0), Vector3(0.18, 3.5, 15.2), _wall_mat(upper_wall_material, gym["wall"]))
@@ -67,8 +65,8 @@ func _add_back_wall_texture_panel() -> void:
 	panel.name = "BackWallTexturePanel"
 	panel.mesh = mesh
 	panel.position = Vector3(0.0, 3.50, 7.39)
-	panel.rotation_degrees = Vector3(90.0, 0.0, 0.0)
-	panel.material_override = back_wall_texture_material.duplicate() as StandardMaterial3D
+	panel.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	panel.material_override = _wall_texture_mat(back_wall_texture_material, true, true)
 	panel.layers = 2
 	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	panel.add_to_group("gym")
@@ -84,7 +82,7 @@ func _add_left_wall_texture_panel() -> void:
 	panel.mesh = mesh
 	panel.position = Vector3(-10.70, 3.50, -0.12)
 	panel.rotation_degrees = Vector3(90.0, 90.0, 0.0)
-	panel.material_override = left_wall_texture_material.duplicate() as StandardMaterial3D
+	panel.material_override = _wall_texture_mat(left_wall_texture_material, false, false)
 	panel.layers = 2
 	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	panel.add_to_group("gym")
@@ -99,8 +97,8 @@ func _add_front_wall_texture_panel() -> void:
 	panel.name = "FrontWallTexturePanel"
 	panel.mesh = mesh
 	panel.position = Vector3(0.0, 3.50, -7.39)
-	panel.rotation_degrees = Vector3(90.0, 180.0, 0.0)
-	panel.material_override = front_wall_texture_material.duplicate() as StandardMaterial3D
+	panel.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	panel.material_override = _wall_texture_mat(front_wall_texture_material, false, false)
 	panel.layers = 2
 	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	panel.add_to_group("gym")
@@ -116,7 +114,7 @@ func _add_right_side_wall_texture_panel() -> void:
 	panel.mesh = mesh
 	panel.position = Vector3(10.70, 3.50, -0.12)
 	panel.rotation_degrees = Vector3(90.0, -90.0, 0.0)
-	panel.material_override = right_side_wall_texture_material.duplicate() as StandardMaterial3D
+	panel.material_override = _wall_texture_mat(right_side_wall_texture_material, false, false)
 	panel.layers = 2
 	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	panel.add_to_group("gym")
@@ -184,8 +182,7 @@ func _add_ceiling_shadow_spot(light_name: String, origin: Vector3, target: Vecto
 	var spot := SpotLight3D.new()
 	spot.name = light_name
 	spot.add_to_group("ceiling_shadow_lights")
-	spot.position = origin
-	spot.look_at(target, Vector3.UP)
+	spot.look_at_from_position(origin, target, Vector3.UP)
 	spot.light_energy = energy
 	spot.light_color = Color(1.0, 0.90, 0.74)
 	spot.light_bake_mode = Light3D.BAKE_DYNAMIC
@@ -268,6 +265,12 @@ func _wall_mat(source: StandardMaterial3D, color: Color) -> StandardMaterial3D:
 	mat.emission = color
 	mat.emission_energy_multiplier = 0.06
 	mat.disable_receive_shadows = false
+	return mat
+
+func _wall_texture_mat(source: StandardMaterial3D, flip_x: bool, flip_y: bool) -> StandardMaterial3D:
+	var mat: StandardMaterial3D = source.duplicate() as StandardMaterial3D
+	mat.uv1_scale = Vector3(-1.0 if flip_x else 1.0, -1.0 if flip_y else 1.0, 1.0)
+	mat.uv1_offset = Vector3(1.0 if flip_x else 0.0, 1.0 if flip_y else 0.0, 0.0)
 	return mat
 
 func _set_light_property(light: Light3D, property_name: String, value: Variant) -> void:

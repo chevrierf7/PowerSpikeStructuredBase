@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ShotData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/ShotData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+shot_id = &"serve_lob"
+animation_name = &"serve_long"
+impact_time = 1.75
+recovery_time = 0.55
+move_speed_scale = 0.35
+shuttle_speed = 12.0
+shuttle_arc = 4.2
+shuttle_spin = Vector3(0, 0.15, 0)
+can_jump = false
+is_attack = false
+hit_stop_duration = 0.018
+feedback_intensity = 0.55
+camera_pulse = 0.34
+trail_boost = 0.15
+impact_flash_scale = 1.0

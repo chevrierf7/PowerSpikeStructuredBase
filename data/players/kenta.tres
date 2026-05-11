@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="PlayerProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/PlayerProfile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "kenta"
+display_name = "Kenta"
+color_primary = Color(1, 0.76, 0.14, 1)
+color_secondary = Color(0.20, 0.12, 0.025, 1)
+color_accent = Color(1, 0.96, 0.65, 1)
+ai_style = "steady"
+play_style = "rally"

@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="PlayerProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/PlayerProfile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "sora"
+display_name = "Sora"
+color_primary = Color(0.24, 0.88, 1, 1)
+color_secondary = Color(0.02, 0.10, 0.18, 1)
+color_accent = Color(0.70, 1, 0.95, 1)
+ai_style = "fast"
+play_style = "speed"

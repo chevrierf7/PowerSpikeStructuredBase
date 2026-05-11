@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ShotData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/ShotData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+shot_id = &"defense_block"
+animation_name = &"defense_block"
+impact_time = 0.18
+recovery_time = 0.30
+move_speed_scale = 0.70
+shuttle_speed = 9.5
+shuttle_arc = 1.7
+shuttle_spin = Vector3(0.15, 0, 0.1)
+can_jump = false
+is_attack = false
+hit_stop_duration = 0.020
+feedback_intensity = 0.62
+camera_pulse = 0.48
+trail_boost = 0.12
+impact_flash_scale = 0.85

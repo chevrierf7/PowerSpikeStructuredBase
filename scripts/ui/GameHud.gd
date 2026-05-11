@@ -14,6 +14,7 @@ signal hitbox_toggled
 signal player_ai_toggled
 signal difficulty_toggled
 signal graphics_toggled
+signal sfx_volume_changed(value: float)
 signal camera_preset_selected(slot: int)
 signal camera_preview_changed(settings: Dictionary)
 signal camera_preset_saved(slot: int, settings: Dictionary)
@@ -21,6 +22,15 @@ signal camera_preset_saved(slot: int, settings: Dictionary)
 var move_vector := Vector2.ZERO
 var aim_vector := Vector2.ZERO
 
+const SCORE_HUD_SCENE := preload("res://scenes/ui/ScoreHUD.tscn")
+const PLAYER_SELECT_SCENE := preload("res://scenes/ui/PlayerSelectScreen.tscn")
+
+var score_hud: ScoreHUD
+var player_select_screen: PlayerSelectScreen
+var player_1_profile: PlayerProfile
+var player_2_profile: PlayerProfile
+var player_1_name := "Kai"
+var player_2_name := "Mina"
 var score_label := Label.new()
 var status_label := Label.new()
 var pause_label := Label.new()
@@ -42,6 +52,13 @@ var intro_vs_label := Label.new()
 var intro_status_label := Label.new()
 var intro_settings_label := Label.new()
 var ui_click_player := AudioStreamPlayer.new()
+var menu_music_player := AudioStreamPlayer.new()
+var menu_music_fade_tween: Tween
+const MENU_MUSIC_VOLUME_DB := -3.0
+const MATCH_MUSIC_VOLUME_DB := -24.0
+var menu_music_ducked := false
+var music_volume_slider := HSlider.new()
+var music_volume_value_label := Label.new()
 var player_name_option := OptionButton.new()
 var player_control_option := OptionButton.new()
 var difficulty_option := OptionButton.new()
@@ -57,6 +74,14 @@ var difficulty_button := Button.new()
 var graphics_button := Button.new()
 var debug_panel_button := Button.new()
 var debug_panel := Panel.new()
+var hud_button := Button.new()
+var hud_panel := Panel.new()
+var hud_scroll := ScrollContainer.new()
+var hud_content := Control.new()
+var hud_sliders: Dictionary = {}
+var updating_hud_controls: bool = false
+var sfx_volume_slider := HSlider.new()
+var sfx_volume_value_label := Label.new()
 var camera_button := Button.new()
 var controls_visibility_button := Button.new()
 var camera_panel := Panel.new()
@@ -64,6 +89,7 @@ var camera_scroll := ScrollContainer.new()
 var camera_content := Control.new()
 var camera_slot_buttons: Array[Button] = []
 var camera_sliders := {}
+var current_camera_settings := {}
 var selected_camera_slot := 0
 var updating_camera_controls := false
 var joystick_area := Control.new()
@@ -79,6 +105,11 @@ var joystick_center := Vector2.ZERO
 var aim_pad_center := Vector2.ZERO
 var game_controls_visible := false
 var match_setup_settings_path := "user://match_setup.cfg"
+var default_match_setup_settings_path := "res://config/default_match_setup.cfg"
+var hud_tuning_settings_path := "user://hud_tuning.cfg"
+const LEGACY_PROJECT_USER_DIR := "Power Spike Structured Base"
+const LEGACY_MIGRATION_KEY := "legacy_migrated_from"
+const MATCH_SETUP_SETTINGS_VERSION := 3
 
 func _ready() -> void:
 	var root := Control.new()
@@ -91,6 +122,16 @@ func _ready() -> void:
 	_build_pause_menu(root)
 	ui_click_player.stream = load("res://assets/ui/ui_click.wav")
 	add_child(ui_click_player)
+	menu_music_player.stream = load("res://assets/ui/Gymnasium Sunset Loop.mp3")
+	if menu_music_player.stream is AudioStreamMP3:
+		(menu_music_player.stream as AudioStreamMP3).loop = true
+	elif menu_music_player.stream is AudioStreamWAV:
+		(menu_music_player.stream as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
+	menu_music_player.bus = "Master"
+	menu_music_player.volume_db = _music_volume_db(MENU_MUSIC_VOLUME_DB)
+	menu_music_player.autoplay = false
+	add_child(menu_music_player)
+	call_deferred("_play_menu_music")
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
@@ -118,10 +159,22 @@ func _input(event: InputEvent) -> void:
 			_update_aim_pad(drag.position)
 			get_viewport().set_input_as_handled()
 
-func update_match(mode: String, status: String, rally: String, player_score: int, player_sets: int, opponent_score: int, opponent_sets: int) -> void:
+func update_match(mode: String, status: String, rally: String, player_score: int, player_sets: int, opponent_score: int, opponent_sets: int, server_name: String = "", point_winner_name: String = "") -> void:
 	var mode_name: String = "Double" if mode == "doubles" else "Simple"
-	score_label.text = "%s | Kai %d (%d)  -  Mina %d (%d)" % [mode_name, player_score, player_sets, opponent_score, opponent_sets]
+	if server_name == "":
+		server_name = player_1_name
+	if score_hud != null:
+		score_hud.update_score(player_1_name, player_score, player_sets, player_2_name, opponent_score, opponent_sets, server_name, point_winner_name)
+	score_label.text = "%s | %s %d (%d)  -  %s %d (%d)" % [mode_name, player_1_name, player_score, player_sets, player_2_name, opponent_score, opponent_sets]
 	status_label.text = "%s | %s" % [status, rally]
+
+func setup_profiles(p1_profile: PlayerProfile, p2_profile: PlayerProfile) -> void:
+	player_1_profile = p1_profile
+	player_2_profile = p2_profile
+	player_1_name = p1_profile.safe_name() if p1_profile != null else "Kai"
+	player_2_name = p2_profile.safe_name() if p2_profile != null else "Mina"
+	if score_hud != null:
+		score_hud.setup_profiles(p1_profile, p2_profile)
 
 func set_timing(text: String) -> void:
 	timing_label.text = ""
@@ -141,6 +194,7 @@ func show_main_menu() -> void:
 	camera_panel.visible = false
 	debug_panel.visible = false
 	menu_fade_rect.color = Color(0.0, 0.0, 0.0, 0.0)
+	_play_menu_music()
 	if main_menu_panel.get_parent() != null:
 		_play_main_menu_entry()
 
@@ -150,8 +204,59 @@ func hide_menus() -> void:
 	pause_label.visible = false
 	joystick_area.visible = game_controls_visible
 	action_panel.visible = game_controls_visible
+	_duck_menu_music_for_match()
+
+func _play_menu_music() -> void:
+	if menu_music_fade_tween != null:
+		menu_music_fade_tween.kill()
+		menu_music_fade_tween = null
+	menu_music_ducked = false
+	menu_music_player.volume_db = _music_volume_db(MENU_MUSIC_VOLUME_DB)
+	if menu_music_player.stream != null and not menu_music_player.playing:
+		menu_music_player.play()
+
+func _duck_menu_music_for_match() -> void:
+	if menu_music_fade_tween != null:
+		menu_music_fade_tween.kill()
+	if not menu_music_player.playing and menu_music_player.stream != null:
+		menu_music_player.play()
+	menu_music_ducked = true
+	menu_music_fade_tween = create_tween()
+	menu_music_fade_tween.tween_property(menu_music_player, "volume_db", _music_volume_db(MATCH_MUSIC_VOLUME_DB), 2.0)
+	menu_music_fade_tween.tween_callback(func() -> void:
+		menu_music_fade_tween = null
+	)
+
+func _stop_menu_music() -> void:
+	if menu_music_player.playing:
+		if menu_music_fade_tween != null:
+			menu_music_fade_tween.kill()
+		menu_music_fade_tween = create_tween()
+		menu_music_fade_tween.tween_property(menu_music_player, "volume_db", -40.0, 10.0)
+		menu_music_fade_tween.tween_callback(func() -> void:
+			menu_music_player.stop()
+			menu_music_player.volume_db = _music_volume_db(MENU_MUSIC_VOLUME_DB)
+			menu_music_fade_tween = null
+		)
+
+func _music_volume_db(base_volume_db: float) -> float:
+	var music_volume: float = get_music_volume()
+	if music_volume <= 0.001:
+		return -80.0
+	return base_volume_db + linear_to_db(music_volume)
+
+func _apply_music_volume() -> void:
+	if menu_music_fade_tween != null:
+		menu_music_fade_tween.kill()
+		menu_music_fade_tween = null
+	var base_volume_db: float = MATCH_MUSIC_VOLUME_DB if menu_music_ducked else MENU_MUSIC_VOLUME_DB
+	menu_music_player.volume_db = _music_volume_db(base_volume_db)
 
 func _build_labels(root: Control) -> void:
+	score_hud = SCORE_HUD_SCENE.instantiate() as ScoreHUD
+	root.add_child(score_hud)
+	score_label.visible = false
+	status_label.visible = false
 	score_label.position = Vector2(24, 18)
 	score_label.add_theme_font_size_override("font_size", 26)
 	score_label.add_theme_color_override("font_color", Color(1.0, 0.98, 0.90))
@@ -258,18 +363,19 @@ func _build_main_menu(root: Control) -> void:
 	menu_gear_button.anchor_top = 0.0
 	menu_gear_button.anchor_right = 1.0
 	menu_gear_button.anchor_bottom = 0.0
-	menu_gear_button.offset_left = -78.0
+	menu_gear_button.offset_left = -150.0
 	menu_gear_button.offset_top = 26.0
 	menu_gear_button.offset_right = -26.0
 	menu_gear_button.offset_bottom = 78.0
-	menu_gear_button.text = "⚙"
-	menu_gear_button.add_theme_font_size_override("font_size", 27)
+	menu_gear_button.text = "Reglages"
+	menu_gear_button.add_theme_font_size_override("font_size", 13)
 	menu_gear_button.add_theme_color_override("font_color", Color(0.88, 0.97, 1.0))
 	menu_gear_button.add_theme_stylebox_override("normal", _gear_button_style(Color(0.0, 0.02, 0.04, 0.25), Color(0.32, 0.78, 1.0, 0.24), 1))
 	menu_gear_button.add_theme_stylebox_override("hover", _gear_button_style(Color(0.02, 0.10, 0.16, 0.42), Color(0.55, 0.92, 1.0, 0.72), 7))
 	menu_gear_button.add_theme_stylebox_override("pressed", _gear_button_style(Color(0.0, 0.04, 0.08, 0.56), Color(0.35, 0.82, 1.0, 0.55), 3))
 	menu_gear_button.pressed.connect(func() -> void:
 		debug_panel.visible = true
+		camera_panel.visible = false
 		debug_panel.move_to_front()
 	)
 	_wire_arcade_button_fx(menu_gear_button, 1.06, 0.94)
@@ -286,14 +392,11 @@ func _build_main_menu(root: Control) -> void:
 	main_settings_panel.add_theme_stylebox_override("panel", _arcade_panel_style())
 	main_menu_panel.add_child(main_settings_panel)
 	main_settings_panel.add_child(selectors_grid)
-	_add_menu_option(selectors_grid, "Joueur", player_name_option, Vector2(0, 0), ["Kai"])
-	player_name_option.disabled = true
-	_add_menu_option(selectors_grid, "IA", player_control_option, Vector2(238, 0), ["Non", "Oui"])
-	_add_menu_option(selectors_grid, "Niveau", difficulty_option, Vector2(476, 0), ["Loisir", "Club", "Elite"])
+	_add_menu_option(selectors_grid, "Controle", player_control_option, Vector2(0, 0), ["Manuel", "IA"])
+	_add_menu_option(selectors_grid, "Niveau", difficulty_option, Vector2(238, 0), ["Loisir", "Club", "Elite"])
 	difficulty_option.select(1)
-	_add_menu_option(selectors_grid, "Mode", match_mode_option, Vector2(0, 72), ["Simple", "Double"])
+	_add_menu_option(selectors_grid, "Mode", match_mode_option, Vector2(476, 0), ["Simple", "Double"])
 	_add_menu_option(selectors_grid, "Camera", start_camera_option, Vector2(238, 72), ["Terrain", "Dos joueur"])
-	_add_menu_option(selectors_grid, "Terrain", terrain_option, Vector2(476, 72), ["Gymnase", "Arena"])
 	_load_match_setup_settings()
 	main_start_button = _menu_button("COMMENCER", Vector2(200, 0), _start_match_from_menu)
 	main_start_button.name = "StartButton"
@@ -310,7 +413,7 @@ func _build_main_menu(root: Control) -> void:
 	secondary_buttons.position = Vector2(240, 86)
 	secondary_buttons.size = Vector2(280, 44)
 	main_menu_panel.add_child(secondary_buttons)
-	match_settings_button = _menu_button("RÉGLAGE PARTIE", Vector2(0, 0), _toggle_match_settings_panel)
+	match_settings_button = _menu_button("REGLAGE PARTIE", Vector2(0, 0), _toggle_match_settings_panel)
 	match_settings_button.name = "MatchSettingsButton"
 	match_settings_button.size = Vector2(280, 44)
 	match_settings_button.add_theme_font_size_override("font_size", 16)
@@ -340,6 +443,30 @@ func _start_match_from_menu() -> void:
 	ui_click_player.play()
 	var settings := get_main_menu_settings()
 	_save_match_setup_settings(settings)
+	_open_player_select(settings)
+
+func _open_player_select(settings: Dictionary) -> void:
+	if player_select_screen != null and is_instance_valid(player_select_screen):
+		player_select_screen.queue_free()
+	player_select_screen = PLAYER_SELECT_SCENE.instantiate() as PlayerSelectScreen
+	player_select_screen.setup(settings)
+	player_select_screen.selection_confirmed.connect(_on_player_selection_confirmed)
+	player_select_screen.cancelled.connect(_on_player_selection_cancelled)
+	add_child(player_select_screen)
+
+func _on_player_selection_cancelled() -> void:
+	if player_select_screen != null and is_instance_valid(player_select_screen):
+		player_select_screen.queue_free()
+	player_select_screen = null
+	main_start_button.disabled = false
+
+func _on_player_selection_confirmed(settings: Dictionary) -> void:
+	if player_select_screen != null and is_instance_valid(player_select_screen):
+		player_select_screen.queue_free()
+	player_select_screen = null
+	await _begin_match_after_player_select(settings)
+
+func _begin_match_after_player_select(settings: Dictionary) -> void:
 	await _play_pre_match_intro(settings)
 	start_game.emit(settings)
 	await get_tree().process_frame
@@ -357,7 +484,7 @@ func _toggle_match_settings_panel() -> void:
 		_show_match_settings_panel()
 
 func _show_match_settings_panel() -> void:
-	match_settings_button.text = "FERMER RÉGLAGES"
+	match_settings_button.text = "FERMER REGLAGES"
 	main_settings_panel.visible = true
 	main_settings_panel.modulate = Color(1, 1, 1, 0)
 	main_settings_panel.position.y = -145.0
@@ -367,7 +494,7 @@ func _show_match_settings_panel() -> void:
 	tween.tween_property(main_settings_panel, "position:y", -165.0, 0.20).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 func _hide_match_settings_panel() -> void:
-	match_settings_button.text = "RÉGLAGE PARTIE"
+	match_settings_button.text = "REGLAGE PARTIE"
 	var tween := create_tween()
 	tween.set_parallel(true)
 	tween.tween_property(main_settings_panel, "modulate", Color(1, 1, 1, 0), 0.14).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
@@ -457,6 +584,7 @@ func _build_intro_card(player_name: String, role: String, accent: Color) -> Pane
 	var card := Panel.new()
 	card.add_theme_stylebox_override("panel", _intro_card_style(accent))
 	var name_label := Label.new()
+	name_label.name = "NameLabel"
 	name_label.text = player_name
 	name_label.position = Vector2(26, 38)
 	name_label.size = Vector2(340, 82)
@@ -469,6 +597,7 @@ func _build_intro_card(player_name: String, role: String, accent: Color) -> Pane
 	name_label.add_theme_constant_override("shadow_offset_y", 4)
 	card.add_child(name_label)
 	var role_label := Label.new()
+	role_label.name = "RoleLabel"
 	role_label.text = role
 	role_label.position = Vector2(26, 128)
 	role_label.size = Vector2(340, 32)
@@ -481,6 +610,7 @@ func _build_intro_card(player_name: String, role: String, accent: Color) -> Pane
 func _play_pre_match_intro(settings: Dictionary) -> void:
 	if main_settings_panel.visible:
 		await _hide_match_settings_panel()
+	_refresh_intro_profiles()
 	pre_match_intro_overlay.visible = true
 	pre_match_intro_overlay.modulate = Color(1, 1, 1, 0)
 	_set_intro_card_offsets(intro_kai_card, -720.0, -325.0, -175.0, 45.0)
@@ -516,10 +646,28 @@ func _play_pre_match_intro(settings: Dictionary) -> void:
 	await get_tree().create_timer(0.70).timeout
 
 func _intro_settings_text(settings: Dictionary) -> String:
-	var mode_text := "DOUBLE" if String(settings.get("mode", "singles")) == "doubles" else "SIMPLE"
-	var difficulty_text := String(settings.get("difficulty", "club")).to_upper()
-	var camera_text := "DOS JOUEUR" if int(settings.get("camera_slot", 0)) == 3 else "TERRAIN"
+	var mode_text: String = "DOUBLE" if String(settings.get("mode", "singles")) == "doubles" else "SIMPLE"
+	var difficulty_text: String = String(settings.get("difficulty", "club")).to_upper()
+	var camera_text: String = "DOS JOUEUR" if int(settings.get("camera_slot", 0)) == 3 else "TERRAIN"
 	return "%s  /  %s  /  CAMERA %s" % [mode_text, difficulty_text, camera_text]
+
+func _refresh_intro_profiles() -> void:
+	var selection := get_node_or_null("/root/GameSelection")
+	var p1: PlayerProfile = selection.get_player_1() if selection != null else player_1_profile
+	var p2: PlayerProfile = selection.get_player_2() if selection != null else player_2_profile
+	_apply_intro_card_profile(intro_kai_card, p1, "PLAYER")
+	_apply_intro_card_profile(intro_mina_card, p2, "RIVAL")
+
+func _apply_intro_card_profile(card: Panel, profile: PlayerProfile, fallback_role: String) -> void:
+	if card == null or profile == null:
+		return
+	card.add_theme_stylebox_override("panel", _intro_card_style(profile.color_primary))
+	var name_label := card.get_node_or_null("NameLabel") as Label
+	if name_label != null:
+		name_label.text = profile.safe_name().to_upper()
+	var role_label := card.get_node_or_null("RoleLabel") as Label
+	if role_label != null:
+		role_label.text = profile.play_style.to_upper() if profile.play_style != "" else fallback_role
 
 func _set_intro_card_offsets(card: Control, left: float, right: float, top: float, bottom: float) -> void:
 	card.offset_left = left
@@ -543,7 +691,7 @@ func _play_main_menu_entry() -> void:
 	main_dark_overlay.modulate = Color(1, 1, 1, 0)
 	main_settings_panel.visible = false
 	main_settings_panel.modulate = Color(1, 1, 1, 0)
-	match_settings_button.text = "RÉGLAGE PARTIE"
+	match_settings_button.text = "REGLAGE PARTIE"
 	main_menu_logo.position.y -= 18.0
 	main_menu_panel.position.y += 14.0
 	var tween := create_tween()
@@ -623,12 +771,30 @@ func get_main_menu_settings() -> Dictionary:
 		"difficulty": ["loisir", "club", "elite"][difficulty_option.selected],
 		"mode": "doubles" if match_mode_option.selected == 1 else "singles",
 		"camera_slot": 3 if start_camera_option.selected == 1 else 0,
-		"terrain": "arena" if terrain_option.selected == 1 else "gymnase"
+		"terrain": "gymnase",
+		"music_volume": get_music_volume(),
+		"sfx_volume": get_sfx_volume()
 	}
+
+func get_music_volume() -> float:
+	return float(music_volume_slider.value) / 100.0
+
+func get_sfx_volume() -> float:
+	return float(sfx_volume_slider.value) / 100.0
 
 func _load_match_setup_settings() -> void:
 	var config := ConfigFile.new()
-	if config.load(match_setup_settings_path) != OK:
+	var user_loaded: bool = config.load(match_setup_settings_path) == OK
+	var legacy_path := _legacy_user_file_path("match_setup.cfg")
+	var should_migrate_legacy := legacy_path != "" and (not user_loaded or String(config.get_value("meta", LEGACY_MIGRATION_KEY, "")) != LEGACY_PROJECT_USER_DIR)
+	if should_migrate_legacy:
+		if legacy_path != "" and config.load(legacy_path) == OK:
+			user_loaded = true
+	var default_config := ConfigFile.new()
+	var default_loaded: bool = default_config.load(default_match_setup_settings_path) == OK
+	if default_loaded and not user_loaded:
+		config = default_config
+	elif not user_loaded:
 		return
 	player_control_option.select(1 if bool(config.get_value("match", "player_ai_enabled", false)) else 0)
 	var difficulty := String(config.get_value("match", "difficulty", "club"))
@@ -637,17 +803,39 @@ func _load_match_setup_settings() -> void:
 	match_mode_option.select(1 if mode == "doubles" else 0)
 	var camera_slot := int(config.get_value("match", "camera_slot", 0))
 	start_camera_option.select(1 if camera_slot == 3 else 0)
-	var terrain := String(config.get_value("match", "terrain", "gymnase"))
-	terrain_option.select(1 if terrain == "arena" else 0)
+	var sfx_volume: float = clamp(float(config.get_value("audio", "sfx_volume", 0.85)), 0.0, 1.0)
+	sfx_volume_slider.value = sfx_volume * 100.0
+	_update_sfx_volume_label(sfx_volume_slider.value)
+	var music_volume: float = clamp(float(config.get_value("audio", "music_volume", 0.65)), 0.0, 1.0)
+	music_volume_slider.value = music_volume * 100.0
+	_update_music_volume_label(music_volume_slider.value)
+	_apply_music_volume()
+	_save_match_setup_settings(get_main_menu_settings(), LEGACY_PROJECT_USER_DIR if should_migrate_legacy else String(config.get_value("meta", LEGACY_MIGRATION_KEY, "")))
 
-func _save_match_setup_settings(settings: Dictionary) -> void:
+func _save_match_setup_settings(settings: Dictionary, migrated_from := "") -> void:
+	if migrated_from == "":
+		var existing_config := ConfigFile.new()
+		if existing_config.load(match_setup_settings_path) == OK:
+			migrated_from = String(existing_config.get_value("meta", LEGACY_MIGRATION_KEY, ""))
 	var config := ConfigFile.new()
+	config.set_value("meta", "settings_version", MATCH_SETUP_SETTINGS_VERSION)
+	if migrated_from != "":
+		config.set_value("meta", LEGACY_MIGRATION_KEY, migrated_from)
 	config.set_value("match", "player_ai_enabled", bool(settings.get("player_ai_enabled", false)))
 	config.set_value("match", "difficulty", String(settings.get("difficulty", "club")))
 	config.set_value("match", "mode", String(settings.get("mode", "singles")))
 	config.set_value("match", "camera_slot", int(settings.get("camera_slot", 0)))
 	config.set_value("match", "terrain", String(settings.get("terrain", "gymnase")))
+	config.set_value("audio", "music_volume", float(settings.get("music_volume", get_music_volume())))
+	config.set_value("audio", "sfx_volume", float(settings.get("sfx_volume", get_sfx_volume())))
 	config.save(match_setup_settings_path)
+
+func _legacy_user_file_path(file_name: String) -> String:
+	var current_dir := ProjectSettings.globalize_path("user://")
+	if current_dir == "":
+		return ""
+	var legacy_path := current_dir.get_base_dir().path_join(LEGACY_PROJECT_USER_DIR).path_join(file_name)
+	return legacy_path if FileAccess.file_exists(legacy_path) else ""
 
 func _add_menu_option(root: Control, label_text: String, option: OptionButton, pos: Vector2, items: Array[String]) -> void:
 	var field := Panel.new()
@@ -725,7 +913,7 @@ func set_hitbox_debug(enabled: bool) -> void:
 	hitbox_button.text = "Hitbox ON" if enabled else "Hitbox OFF"
 
 func set_player_ai(enabled: bool) -> void:
-	player_ai_button.text = "Kai IA" if enabled else "Kai joueur"
+	player_ai_button.text = "%s IA" % player_1_name if enabled else "%s joueur" % player_1_name
 
 func set_difficulty(label: String) -> void:
 	difficulty_button.text = "Niveau " + label
@@ -738,12 +926,12 @@ func _build_debug_controls(root: Control) -> void:
 	debug_panel_button.anchor_top = 0.0
 	debug_panel_button.anchor_right = 1.0
 	debug_panel_button.anchor_bottom = 0.0
-	debug_panel_button.offset_left = -138.0
-	debug_panel_button.offset_top = 18.0
-	debug_panel_button.offset_right = -18.0
-	debug_panel_button.offset_bottom = 54.0
-	debug_panel_button.text = "Options"
-	debug_panel_button.add_theme_font_size_override("font_size", 14)
+	debug_panel_button.offset_left = -162.0
+	debug_panel_button.offset_top = 22.0
+	debug_panel_button.offset_right = -24.0
+	debug_panel_button.offset_bottom = 62.0
+	debug_panel_button.text = "Reglages"
+	debug_panel_button.add_theme_font_size_override("font_size", 16)
 	debug_panel_button.add_theme_stylebox_override("normal", _button_style(Color(0.11, 0.12, 0.14, 0.78)))
 	debug_panel_button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.36, 0.94)))
 	debug_panel_button.pressed.connect(_toggle_debug_panel)
@@ -753,76 +941,341 @@ func _build_debug_controls(root: Control) -> void:
 	debug_panel.anchor_top = 0.0
 	debug_panel.anchor_right = 1.0
 	debug_panel.anchor_bottom = 0.0
-	debug_panel.offset_left = -150.0
-	debug_panel.offset_top = 60.0
-	debug_panel.offset_right = -18.0
-	debug_panel.offset_bottom = 298.0
+	debug_panel.offset_left = -440.0
+	debug_panel.offset_top = 76.0
+	debug_panel.offset_right = -24.0
+	debug_panel.offset_bottom = 560.0
 	debug_panel.visible = false
 	debug_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.09, 0.10, 0.86), Color(1, 1, 1, 0.18), 8))
 	root.add_child(debug_panel)
 
-	hitbox_button.position = Vector2(8, 8)
-	hitbox_button.size = Vector2(116, 32)
-	hitbox_button.text = "Hitbox OFF"
-	hitbox_button.add_theme_font_size_override("font_size", 14)
-	hitbox_button.add_theme_stylebox_override("normal", _button_style(Color(0.11, 0.12, 0.14, 0.78)))
-	hitbox_button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.36, 0.94)))
-	hitbox_button.pressed.connect(func() -> void: hitbox_toggled.emit())
-	debug_panel.add_child(hitbox_button)
-	player_ai_button.position = Vector2(8, 46)
-	player_ai_button.size = Vector2(116, 32)
+	var title := Label.new()
+	title.text = "Reglages"
+	title.position = Vector2(20, 16)
+	title.size = Vector2(320, 32)
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(1.0, 0.94, 0.72))
+	debug_panel.add_child(title)
+
+	var match_label := Label.new()
+	match_label.text = "Partie"
+	match_label.position = Vector2(22, 58)
+	match_label.size = Vector2(150, 22)
+	match_label.add_theme_font_size_override("font_size", 15)
+	debug_panel.add_child(match_label)
+
+	player_ai_button.position = Vector2(22, 86)
+	player_ai_button.size = Vector2(148, 40)
 	player_ai_button.text = "Kai joueur"
-	player_ai_button.add_theme_font_size_override("font_size", 14)
+	player_ai_button.add_theme_font_size_override("font_size", 15)
 	player_ai_button.add_theme_stylebox_override("normal", _button_style(Color(0.11, 0.12, 0.14, 0.78)))
 	player_ai_button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.36, 0.94)))
 	player_ai_button.pressed.connect(func() -> void: player_ai_toggled.emit())
 	debug_panel.add_child(player_ai_button)
-	difficulty_button.position = Vector2(8, 84)
-	difficulty_button.size = Vector2(116, 32)
+	difficulty_button.position = Vector2(190, 86)
+	difficulty_button.size = Vector2(148, 40)
 	difficulty_button.text = "Niveau Club"
-	difficulty_button.add_theme_font_size_override("font_size", 14)
+	difficulty_button.add_theme_font_size_override("font_size", 15)
 	difficulty_button.add_theme_stylebox_override("normal", _button_style(Color(0.11, 0.12, 0.14, 0.78)))
 	difficulty_button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.36, 0.94)))
 	difficulty_button.pressed.connect(func() -> void: difficulty_toggled.emit())
 	debug_panel.add_child(difficulty_button)
 
-	graphics_button.position = Vector2(8, 122)
-	graphics_button.size = Vector2(116, 32)
+	var tech_label := Label.new()
+	tech_label.text = "Technique"
+	tech_label.position = Vector2(22, 146)
+	tech_label.size = Vector2(150, 22)
+	tech_label.add_theme_font_size_override("font_size", 15)
+	debug_panel.add_child(tech_label)
+
+	graphics_button.position = Vector2(22, 174)
+	graphics_button.size = Vector2(116, 40)
 	graphics_button.text = "Render"
-	graphics_button.add_theme_font_size_override("font_size", 14)
+	graphics_button.add_theme_font_size_override("font_size", 15)
 	graphics_button.add_theme_stylebox_override("normal", _button_style(Color(0.11, 0.12, 0.14, 0.78)))
 	graphics_button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.36, 0.94)))
 	graphics_button.pressed.connect(func() -> void: graphics_toggled.emit())
 	debug_panel.add_child(graphics_button)
 
-	camera_button.position = Vector2(8, 160)
-	camera_button.size = Vector2(116, 32)
+	camera_button.position = Vector2(150, 174)
+	camera_button.size = Vector2(116, 40)
 	camera_button.text = "Camera"
-	camera_button.add_theme_font_size_override("font_size", 14)
+	camera_button.add_theme_font_size_override("font_size", 15)
 	camera_button.add_theme_stylebox_override("normal", _button_style(Color(0.11, 0.12, 0.14, 0.78)))
 	camera_button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.36, 0.94)))
 	camera_button.pressed.connect(_toggle_camera_panel)
 	debug_panel.add_child(camera_button)
 
-	controls_visibility_button.position = Vector2(8, 198)
-	controls_visibility_button.size = Vector2(116, 32)
-	controls_visibility_button.text = "Masquer"
-	controls_visibility_button.add_theme_font_size_override("font_size", 14)
+	hud_button.position = Vector2(278, 174)
+	hud_button.size = Vector2(116, 40)
+	hud_button.text = "HUD"
+	hud_button.add_theme_font_size_override("font_size", 15)
+	hud_button.add_theme_stylebox_override("normal", _button_style(Color(0.11, 0.12, 0.14, 0.78)))
+	hud_button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.36, 0.94)))
+	hud_button.pressed.connect(_toggle_hud_panel)
+	debug_panel.add_child(hud_button)
+
+	var display_label := Label.new()
+	display_label.text = "Afficher commande"
+	display_label.position = Vector2(22, 234)
+	display_label.size = Vector2(150, 22)
+	display_label.add_theme_font_size_override("font_size", 15)
+	debug_panel.add_child(display_label)
+
+	controls_visibility_button.position = Vector2(22, 262)
+	controls_visibility_button.size = Vector2(190, 40)
+	controls_visibility_button.text = "Masquer commande"
+	controls_visibility_button.add_theme_font_size_override("font_size", 15)
 	controls_visibility_button.add_theme_stylebox_override("normal", _button_style(Color(0.11, 0.12, 0.14, 0.78)))
 	controls_visibility_button.add_theme_stylebox_override("pressed", _button_style(Color(0.22, 0.29, 0.36, 0.94)))
 	controls_visibility_button.pressed.connect(_toggle_game_controls)
 	debug_panel.add_child(controls_visibility_button)
+
+	_build_volume_controls()
 	_build_camera_panel(root)
+	_build_hud_panel(root)
+
+func _build_volume_controls() -> void:
+	_build_music_volume_control(330.0)
+	_build_sfx_volume_control(392.0)
+
+func _build_music_volume_control(y: float) -> void:
+	var label := Label.new()
+	label.text = "Musique"
+	label.position = Vector2(22, y)
+	label.size = Vector2(120, 20)
+	label.add_theme_font_size_override("font_size", 15)
+	debug_panel.add_child(label)
+
+	music_volume_value_label.position = Vector2(338, y)
+	music_volume_value_label.size = Vector2(54, 20)
+	music_volume_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	music_volume_value_label.add_theme_font_size_override("font_size", 15)
+	debug_panel.add_child(music_volume_value_label)
+
+	music_volume_slider.position = Vector2(22, y + 24.0)
+	music_volume_slider.size = Vector2(370, 20)
+	music_volume_slider.min_value = 0.0
+	music_volume_slider.max_value = 100.0
+	music_volume_slider.step = 1.0
+	music_volume_slider.value = 65.0
+	music_volume_slider.value_changed.connect(func(value: float) -> void:
+		_update_music_volume_label(value)
+		_apply_music_volume()
+		_save_match_setup_settings(get_main_menu_settings())
+	)
+	debug_panel.add_child(music_volume_slider)
+	_update_music_volume_label(music_volume_slider.value)
+
+func _build_sfx_volume_control(y: float) -> void:
+	var label := Label.new()
+	label.text = "Sons"
+	label.position = Vector2(22, y)
+	label.size = Vector2(120, 20)
+	label.add_theme_font_size_override("font_size", 15)
+	debug_panel.add_child(label)
+
+	sfx_volume_value_label.position = Vector2(338, y)
+	sfx_volume_value_label.size = Vector2(54, 20)
+	sfx_volume_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	sfx_volume_value_label.add_theme_font_size_override("font_size", 15)
+	debug_panel.add_child(sfx_volume_value_label)
+
+	sfx_volume_slider.position = Vector2(22, y + 24.0)
+	sfx_volume_slider.size = Vector2(370, 20)
+	sfx_volume_slider.min_value = 0.0
+	sfx_volume_slider.max_value = 100.0
+	sfx_volume_slider.step = 1.0
+	sfx_volume_slider.value = 85.0
+	sfx_volume_slider.value_changed.connect(func(value: float) -> void:
+		_update_sfx_volume_label(value)
+		sfx_volume_changed.emit(value / 100.0)
+		_save_match_setup_settings(get_main_menu_settings())
+	)
+	debug_panel.add_child(sfx_volume_slider)
+	_update_sfx_volume_label(sfx_volume_slider.value)
+
+func _build_hud_panel(root: Control) -> void:
+	hud_panel.anchor_left = 0.5
+	hud_panel.anchor_top = 0.5
+	hud_panel.anchor_right = 0.5
+	hud_panel.anchor_bottom = 0.5
+	hud_panel.offset_left = -285.0
+	hud_panel.offset_top = -330.0
+	hud_panel.offset_right = 285.0
+	hud_panel.offset_bottom = 330.0
+	hud_panel.visible = false
+	hud_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.09, 0.10, 0.92), Color(0.35, 0.82, 1.0, 0.26), 8))
+	root.add_child(hud_panel)
+
+	hud_scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hud_panel.add_child(hud_scroll)
+	hud_content.custom_minimum_size = Vector2(560, 1140)
+	hud_scroll.add_child(hud_content)
+
+	var title := Label.new()
+	title.text = "Reglage HUD"
+	title.position = Vector2(24, 18)
+	title.size = Vector2(410, 32)
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(1.0, 0.94, 0.72))
+	hud_content.add_child(title)
+
+	_add_hud_slider("scale", "Taille generale", 0.55, 1.30, 0.01, 0.92, 66.0)
+	_add_hud_slider("offset_x", "Position gauche / droite", -500.0, 500.0, 1.0, 0.0, 118.0)
+	_add_hud_slider("offset_y", "Position haut / bas", -80.0, 260.0, 1.0, 0.0, 170.0)
+	_add_hud_slider("opacity", "Opacite generale", 0.20, 1.0, 0.01, 1.0, 222.0)
+	_add_hud_slider("panel_darkness", "Fond noir", 0.15, 1.0, 0.01, 0.88, 274.0)
+	_add_hud_slider("glow", "Glow lumineux", 0.0, 2.0, 0.01, 1.0, 326.0)
+	_add_hud_slider("details", "Lignes / details", 0.0, 1.5, 0.01, 0.75, 378.0)
+	_add_hud_slider("noise", "Bruit / texture", 0.0, 1.5, 0.01, 0.55, 430.0)
+	_add_hud_slider("score_size", "Taille score", 48.0, 120.0, 1.0, 86.0, 482.0)
+	_add_hud_slider("name_size", "Taille noms", 22.0, 52.0, 1.0, 36.0, 534.0)
+	_add_hud_slider("sets_size", "Taille sets", 12.0, 28.0, 1.0, 18.0, 586.0)
+	_add_hud_slider("service_size", "Taille service", 14.0, 38.0, 1.0, 24.0, 638.0)
+	_add_hud_slider("service_y", "Service haut / bas", -60.0, 90.0, 1.0, 0.0, 690.0)
+	_add_hud_slider("center_size", "Taille VS", 24.0, 68.0, 1.0, 44.0, 742.0)
+	_add_hud_slider("point_x", "Point gauche / droite", -240.0, 240.0, 1.0, 0.0, 794.0)
+	_add_hud_slider("point_y", "Point haut / bas", -90.0, 120.0, 1.0, 0.0, 846.0)
+	_add_hud_slider("point_width", "Point largeur capsule", 120.0, 520.0, 1.0, 318.0, 898.0)
+	_add_hud_slider("point_height", "Point hauteur capsule", 24.0, 90.0, 1.0, 42.0, 950.0)
+	_add_hud_slider("point_text_size", "Point taille texte", 14.0, 54.0, 1.0, 32.0, 1002.0)
+	_add_hud_slider("point_opacity", "Point opacite fond", 0.0, 1.0, 0.01, 1.0, 1054.0)
+
+	var reset_button := Button.new()
+	reset_button.text = "Valeurs HUD defaut"
+	reset_button.position = Vector2(24, 1102)
+	reset_button.size = Vector2(190, 36)
+	reset_button.add_theme_font_size_override("font_size", 15)
+	reset_button.add_theme_stylebox_override("normal", _button_style(Color(0.14, 0.15, 0.17, 0.94)))
+	reset_button.pressed.connect(_reset_hud_tuning)
+	hud_content.add_child(reset_button)
+
+	var close_button := Button.new()
+	close_button.text = "Fermer"
+	close_button.position = Vector2(372, 1102)
+	close_button.size = Vector2(160, 36)
+	close_button.add_theme_font_size_override("font_size", 15)
+	close_button.add_theme_stylebox_override("normal", _button_style(Color(0.18, 0.18, 0.20, 0.96)))
+	close_button.pressed.connect(func() -> void: hud_panel.visible = false)
+	hud_content.add_child(close_button)
+
+	_load_hud_tuning()
+
+func _add_hud_slider(key: String, label_text: String, minimum: float, maximum: float, step: float, default_value: float, y: float) -> void:
+	var label := Label.new()
+	label.text = label_text
+	label.position = Vector2(24, y)
+	label.size = Vector2(230, 22)
+	label.add_theme_font_size_override("font_size", 15)
+	hud_content.add_child(label)
+
+	var value_label := Label.new()
+	value_label.text = _format_hud_value(default_value, step)
+	value_label.position = Vector2(448, y)
+	value_label.size = Vector2(84, 22)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	value_label.add_theme_font_size_override("font_size", 15)
+	hud_content.add_child(value_label)
+
+	var slider := HSlider.new()
+	slider.position = Vector2(24, y + 24.0)
+	slider.size = Vector2(508, 20)
+	slider.min_value = minimum
+	slider.max_value = maximum
+	slider.step = step
+	slider.value = default_value
+	slider.value_changed.connect(func(value: float) -> void:
+		value_label.text = _format_hud_value(value, step)
+		if not updating_hud_controls:
+			_apply_hud_tuning()
+			_save_hud_tuning()
+	)
+	hud_sliders[key] = { "slider": slider, "value_label": value_label, "step": step }
+	hud_content.add_child(slider)
+
+func _format_hud_value(value: float, step: float) -> String:
+	if step >= 1.0:
+		return "%d" % int(round(value))
+	return "%.2f" % value
+
+func _hud_tuning_values() -> Dictionary:
+	var values: Dictionary = {}
+	for key in hud_sliders.keys():
+		var entry: Dictionary = hud_sliders[key]
+		var slider := entry["slider"] as HSlider
+		if is_instance_valid(slider):
+			values[String(key)] = float(slider.value)
+	return values
+
+func _apply_hud_tuning() -> void:
+	if score_hud != null:
+		score_hud.apply_hud_settings(_hud_tuning_values())
+
+func _save_hud_tuning() -> void:
+	var file := FileAccess.open(hud_tuning_settings_path, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify(_hud_tuning_values(), "\t"))
+	file.close()
+
+func _load_hud_tuning() -> void:
+	if score_hud == null:
+		return
+	var values: Dictionary = score_hud.default_hud_settings()
+	if FileAccess.file_exists(hud_tuning_settings_path):
+		var file := FileAccess.open(hud_tuning_settings_path, FileAccess.READ)
+		if file != null:
+			var parsed: Variant = JSON.parse_string(file.get_as_text())
+			file.close()
+			if parsed is Dictionary:
+				for key in (parsed as Dictionary).keys():
+					values[String(key)] = float((parsed as Dictionary)[key])
+	updating_hud_controls = true
+	for key in hud_sliders.keys():
+		if values.has(key):
+			var entry: Dictionary = hud_sliders[key]
+			var slider := entry["slider"] as HSlider
+			var value_label := entry["value_label"] as Label
+			if is_instance_valid(slider):
+				slider.value = float(values[key])
+			if is_instance_valid(value_label):
+				value_label.text = _format_hud_value(float(values[key]), float(entry["step"]))
+	updating_hud_controls = false
+	_apply_hud_tuning()
+
+func _reset_hud_tuning() -> void:
+	if score_hud == null:
+		return
+	var defaults: Dictionary = score_hud.default_hud_settings()
+	updating_hud_controls = true
+	for key in hud_sliders.keys():
+		var entry: Dictionary = hud_sliders[key]
+		var slider := entry["slider"] as HSlider
+		var value_label := entry["value_label"] as Label
+		if defaults.has(key) and is_instance_valid(slider):
+			slider.value = float(defaults[key])
+			if is_instance_valid(value_label):
+				value_label.text = _format_hud_value(slider.value, float(entry["step"]))
+	updating_hud_controls = false
+	_apply_hud_tuning()
+	_save_hud_tuning()
+
+func _update_sfx_volume_label(value: float) -> void:
+	sfx_volume_value_label.text = "%d%%" % int(round(value))
+
+func _update_music_volume_label(value: float) -> void:
+	music_volume_value_label.text = "%d%%" % int(round(value))
 
 func _build_camera_panel(root: Control) -> void:
-	camera_panel.anchor_left = 1.0
-	camera_panel.anchor_top = 0.0
-	camera_panel.anchor_right = 1.0
-	camera_panel.anchor_bottom = 1.0
-	camera_panel.offset_left = -338.0
-	camera_panel.offset_top = 188.0
-	camera_panel.offset_right = -18.0
-	camera_panel.offset_bottom = -18.0
+	camera_panel.anchor_left = 0.5
+	camera_panel.anchor_top = 0.5
+	camera_panel.anchor_right = 0.5
+	camera_panel.anchor_bottom = 0.5
+	camera_panel.offset_left = -285.0
+	camera_panel.offset_top = -330.0
+	camera_panel.offset_right = 285.0
+	camera_panel.offset_bottom = 330.0
 	camera_panel.visible = false
 	camera_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.08, 0.09, 0.10, 0.90), Color(1, 1, 1, 0.20), 8))
 	root.add_child(camera_panel)
@@ -837,53 +1290,55 @@ func _build_camera_panel(root: Control) -> void:
 	camera_scroll.offset_bottom = 0.0
 	camera_panel.add_child(camera_scroll)
 
-	camera_content.custom_minimum_size = Vector2(318, 650)
+	camera_content.custom_minimum_size = Vector2(560, 760)
 	camera_scroll.add_child(camera_content)
 
 	var title := Label.new()
 	title.text = "Reglage camera"
-	title.position = Vector2(18, 14)
-	title.add_theme_font_size_override("font_size", 18)
+	title.position = Vector2(24, 18)
+	title.size = Vector2(410, 32)
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", Color(1.0, 0.94, 0.72))
 	camera_content.add_child(title)
 
 	for i in range(4):
 		var slot_button := Button.new()
 		slot_button.text = _camera_slot_label(i)
-		slot_button.position = Vector2(18 + i * 72, 48)
-		slot_button.size = Vector2(66, 34)
-		slot_button.add_theme_font_size_override("font_size", 13)
+		slot_button.position = Vector2(24 + i * 128, 62)
+		slot_button.size = Vector2(112, 38)
+		slot_button.add_theme_font_size_override("font_size", 14)
 		slot_button.add_theme_stylebox_override("normal", _button_style(Color(0.14, 0.15, 0.17, 0.90)))
 		slot_button.add_theme_stylebox_override("pressed", _button_style(Color(0.25, 0.31, 0.38, 0.96)))
 		slot_button.pressed.connect(_select_camera_slot.bind(i))
 		camera_slot_buttons.append(slot_button)
 		camera_content.add_child(slot_button)
 
-	_add_camera_slider("distance", "Distance", 4.0, 11.0, 0.1, 6.9, 94.0)
-	_add_camera_slider("height", "Hauteur", 0.15, 10.5, 0.05, 7.8, 142.0)
-	_add_camera_slider("focus", "Inclinaison", 0.1, 2.4, 0.05, 0.45, 190.0)
-	_add_camera_slider("follow_y", "Suivi haut/bas", 0.0, 1.0, 0.05, 1.0, 238.0)
-	_add_camera_slider("follow_side", "Suivi lateral volant", 0.0, 1.0, 0.05, 0.0, 286.0)
-	_add_camera_slider("look_z", "Regard volant Z", 0.0, 1.0, 0.05, 0.18, 334.0)
-	_add_camera_slider("follow_x", "Suivi longitudinal", 0.0, 1.0, 0.05, 0.0, 382.0)
-	_add_camera_slider("look_x", "Regard volant X", 0.0, 1.0, 0.05, 0.0, 430.0)
-	_add_camera_slider("side", "Decalage longitudinal", -3.0, 3.0, 0.1, 0.0, 478.0)
-	_add_camera_slider("follow", "Vitesse", 0.0, 12.0, 0.1, 6.0, 526.0)
-	_add_camera_slider("fov", "FOV", 38.0, 74.0, 1.0, 58.0, 574.0)
+	_add_camera_slider("distance", "Distance", 4.0, 11.0, 0.1, 6.9, 122.0)
+	_add_camera_slider("height", "Hauteur", 0.15, 10.5, 0.05, 7.8, 174.0)
+	_add_camera_slider("focus", "Inclinaison", 0.1, 2.4, 0.05, 0.45, 226.0)
+	_add_camera_slider("follow_y", "Suivi haut/bas", 0.0, 1.0, 0.05, 1.0, 278.0)
+	_add_camera_slider("follow_side", "Suivi lateral volant", 0.0, 1.0, 0.05, 0.0, 330.0)
+	_add_camera_slider("look_z", "Regard volant Z", 0.0, 1.0, 0.05, 0.18, 382.0)
+	_add_camera_slider("follow_x", "Suivi longitudinal", 0.0, 1.0, 0.05, 0.0, 434.0)
+	_add_camera_slider("look_x", "Regard volant X", 0.0, 1.0, 0.05, 0.0, 486.0)
+	_add_camera_slider("side", "Decalage lateral", -3.0, 3.0, 0.1, 0.0, 538.0)
+	_add_camera_slider("follow", "Reactivite", 0.0, 12.0, 0.1, 6.0, 590.0)
+	_add_camera_slider("fov", "Zoom / FOV", 38.0, 74.0, 1.0, 58.0, 642.0)
 
 	var save_button := Button.new()
 	save_button.text = "Valider"
-	save_button.position = Vector2(18, 604)
-	save_button.size = Vector2(92, 30)
-	save_button.add_theme_font_size_override("font_size", 13)
+	save_button.position = Vector2(24, 704)
+	save_button.size = Vector2(160, 36)
+	save_button.add_theme_font_size_override("font_size", 15)
 	save_button.add_theme_stylebox_override("normal", _button_style(Color(0.10, 0.32, 0.22, 0.96)))
 	save_button.pressed.connect(func() -> void: camera_preset_saved.emit(selected_camera_slot, get_camera_settings()))
 	camera_content.add_child(save_button)
 
 	var reset_button := Button.new()
 	reset_button.text = "Annuler"
-	reset_button.position = Vector2(118, 604)
-	reset_button.size = Vector2(92, 30)
-	reset_button.add_theme_font_size_override("font_size", 13)
+	reset_button.position = Vector2(200, 704)
+	reset_button.size = Vector2(160, 36)
+	reset_button.add_theme_font_size_override("font_size", 15)
 	reset_button.add_theme_stylebox_override("normal", _button_style(Color(0.18, 0.18, 0.20, 0.96)))
 	reset_button.pressed.connect(func() -> void:
 		camera_panel.visible = false
@@ -893,9 +1348,9 @@ func _build_camera_panel(root: Control) -> void:
 
 	var close_button := Button.new()
 	close_button.text = "Fermer"
-	close_button.position = Vector2(218, 604)
-	close_button.size = Vector2(84, 30)
-	close_button.add_theme_font_size_override("font_size", 13)
+	close_button.position = Vector2(376, 704)
+	close_button.size = Vector2(160, 36)
+	close_button.add_theme_font_size_override("font_size", 15)
 	close_button.add_theme_stylebox_override("normal", _button_style(Color(0.18, 0.18, 0.20, 0.96)))
 	close_button.pressed.connect(func() -> void: camera_panel.visible = false)
 	camera_content.add_child(close_button)
@@ -903,21 +1358,22 @@ func _build_camera_panel(root: Control) -> void:
 func _add_camera_slider(key: String, label_text: String, minimum: float, maximum: float, step: float, default_value: float, y: float) -> void:
 	var label := Label.new()
 	label.text = label_text
-	label.position = Vector2(18, y)
-	label.add_theme_font_size_override("font_size", 13)
+	label.position = Vector2(24, y)
+	label.size = Vector2(180, 22)
+	label.add_theme_font_size_override("font_size", 15)
 	camera_content.add_child(label)
 
 	var value_label := Label.new()
 	value_label.text = str(default_value)
-	value_label.position = Vector2(244, y)
-	value_label.size = Vector2(58, 20)
+	value_label.position = Vector2(448, y)
+	value_label.size = Vector2(84, 22)
 	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	value_label.add_theme_font_size_override("font_size", 13)
+	value_label.add_theme_font_size_override("font_size", 15)
 	camera_content.add_child(value_label)
 
 	var slider := HSlider.new()
-	slider.position = Vector2(18, y + 20)
-	slider.size = Vector2(284, 18)
+	slider.position = Vector2(24, y + 24)
+	slider.size = Vector2(508, 20)
 	slider.min_value = minimum
 	slider.max_value = maximum
 	slider.step = step
@@ -934,16 +1390,28 @@ func _toggle_camera_panel() -> void:
 	camera_panel.visible = not camera_panel.visible
 	if camera_panel.visible:
 		debug_panel.visible = false
+		hud_panel.visible = false
 		camera_panel.move_to_front()
+
+func _toggle_hud_panel() -> void:
+	hud_panel.visible = not hud_panel.visible
+	if hud_panel.visible:
+		debug_panel.visible = false
+		camera_panel.visible = false
+		hud_panel.move_to_front()
 
 func _toggle_debug_panel() -> void:
 	debug_panel.visible = not debug_panel.visible
+	if debug_panel.visible:
+		camera_panel.visible = false
+		hud_panel.visible = false
+		debug_panel.move_to_front()
 
 func _toggle_game_controls() -> void:
 	game_controls_visible = not game_controls_visible
 	joystick_area.visible = game_controls_visible
 	action_panel.visible = game_controls_visible
-	controls_visibility_button.text = "Masquer" if game_controls_visible else "Afficher"
+	controls_visibility_button.text = "Masquer commande" if game_controls_visible else "Afficher commande"
 
 func _select_camera_slot(slot: int) -> void:
 	selected_camera_slot = slot
@@ -959,6 +1427,7 @@ func _camera_slot_label(slot: int) -> String:
 
 func set_camera_slot(slot: int, settings: Dictionary) -> void:
 	selected_camera_slot = slot
+	current_camera_settings = settings.duplicate()
 	_update_camera_slot_buttons()
 	updating_camera_controls = true
 	for key in camera_sliders.keys():
@@ -971,7 +1440,7 @@ func set_camera_slot(slot: int, settings: Dictionary) -> void:
 	updating_camera_controls = false
 
 func get_camera_settings() -> Dictionary:
-	var settings := {}
+	var settings := current_camera_settings.duplicate()
 	for key in camera_sliders.keys():
 		var entry: Dictionary = camera_sliders[key]
 		var slider := entry["slider"] as HSlider
@@ -1014,7 +1483,7 @@ func _build_mobile_controls(root: Control) -> void:
 	_add_touch_button(action_panel, "Smash", Vector2(256, 4), Vector2(112, 58), func() -> void: smash_pressed.emit())
 	joystick_area.visible = game_controls_visible
 	action_panel.visible = game_controls_visible
-	controls_visibility_button.text = "Masquer" if game_controls_visible else "Afficher"
+	controls_visibility_button.text = "Masquer commande" if game_controls_visible else "Afficher commande"
 
 func _build_aim_pad(root: Control) -> void:
 	aim_area.position = Vector2(0, 22)

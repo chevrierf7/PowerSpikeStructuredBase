@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dchyyiiubk1ob"
+path="res://.godot/imported/Dernier Sprint.mp3-3904a67f090637ab3707c6555b634106.mp3str"
+
+[deps]
+
+source_file="res://assets/ui/Dernier Sprint.mp3"
+dest_files=["res://.godot/imported/Dernier Sprint.mp3-3904a67f090637ab3707c6555b634106.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

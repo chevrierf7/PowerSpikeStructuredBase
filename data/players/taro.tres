@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="PlayerProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/PlayerProfile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "taro"
+display_name = "Taro"
+color_primary = Color(0.72, 0.48, 1, 1)
+color_secondary = Color(0.10, 0.04, 0.20, 1)
+color_accent = Color(0.92, 0.76, 1, 1)
+ai_style = "trickster"
+play_style = "feint"

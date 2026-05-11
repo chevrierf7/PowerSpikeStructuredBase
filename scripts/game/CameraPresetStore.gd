@@ -21,8 +21,10 @@ static func load_presets(path: String) -> Array:
 			presets[i] = preset
 	return presets
 
-static func save_presets(path: String, selected_slot: int, presets: Array) -> void:
+static func save_presets(path: String, selected_slot: int, presets: Array, migrated_from := "") -> void:
 	var config := ConfigFile.new()
+	if migrated_from != "":
+		config.set_value("meta", "legacy_migrated_from", migrated_from)
 	config.set_value("camera", "selected", selected_slot)
 	for i in range(presets.size()):
 		var section := "camera_%d" % [i + 1]

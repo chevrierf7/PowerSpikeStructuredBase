@@ -8,7 +8,17 @@ var landing_marker: MeshInstance3D
 var ai_target_marker: MeshInstance3D
 var camera := Camera3D.new()
 var hud: GameHud
+var hit_sfx: HitSfx
 var render_tuning_panel: Node
+var shot_debug_label: Label
+var hit_feedback_manager: HitFeedbackManager
+var shot_state_machines: Dictionary = {}
+var pending_shots: Dictionary = {}
+var service_lock_positions: Dictionary = {}
+var camera_pulse_until := -10.0
+var camera_pulse_intensity := 0.0
+var last_hit_feedback_text := ""
+var last_hit_feedback_until := -10.0
 var anime_fx_settings := {
 	"enabled": true,
 	"scale": 1.0,
@@ -25,11 +35,13 @@ var landing_marker_settings := {
 	"size_start": 0.70,
 	"size_end": 1.0,
 	"color": Color(0.98, 0.82, 0.18, 1.0),
-	"height": 0.08
+	"height": 0.001
 }
 var landing_marker_requested_visible := false
 var landing_marker_started_at := -10.0
 var shuttle_service_attached := false
+var service_adjustment_mode_active := false
+var service_adjustment_server_side := ""
 var service_shuttle_hold_settings := {}
 var service_shuttle_hold_settings_by_side := {
 	"player": {
@@ -62,9 +74,11 @@ var status_text := "Pret a servir"
 var camera_mode := "court"
 var game_started := false
 var game_paused := false
+var free_camera_active := false
 var free_camera_mouse_look := false
 var free_camera_angles := Vector2.ZERO
 var free_camera_speed := 5.0
+var free_camera_turn_speed := 72.0
 var camera_preset_slot := 0
 var court_camera_preset_slot := 0
 var camera_presets := []
@@ -102,18 +116,24 @@ var rally_start_time := 0.0
 var rally_start_server := ""
 var rally_start_service_kind := ""
 var player_service_unlocked_at := 0.0
+var player_profile: PlayerProfile
+var opponent_profile: PlayerProfile
 const GYM_SCENE := "res://scenes/environment/Gym_JP_A.tscn"
 const COURT_SCENE := "res://scenes/court/Court.tscn"
 const RENDER_TUNING_SCENE := "res://scenes/debug/RenderTuningPanel.tscn"
 const RACKET_IMPACT_FX_SCENE := "res://scenes/fx/RacketImpactFX.tscn"
+const LEGACY_PROJECT_USER_DIR := "Power Spike Structured Base"
+const LEGACY_MIGRATION_KEY := "legacy_migrated_from"
 
 func _ready() -> void:
 	randomize()
 	add_to_group("anime_fx_receivers")
 	add_to_group("service_shuttle_receivers")
+	add_to_group("hitbox_debug_receivers")
 	_ensure_runtime_input_actions()
 	_load_camera_presets()
 	_build_world()
+	_setup_shot_runtime()
 	_reset_for_serve()
 	game_paused = true
 	_set_character_animations_paused(true)
@@ -123,6 +143,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_update_landing_marker_visual()
 	if game_paused:
+		_update_free_camera_keyboard_look(delta)
 		_update_free_camera(delta)
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -135,7 +156,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif game_paused and event is InputEventMouseButton:
 		var mouse_button := event as InputEventMouseButton
 		if mouse_button.button_index == MOUSE_BUTTON_RIGHT:
-			free_camera_mouse_look = mouse_button.pressed
+			if free_camera_active and mouse_button.pressed:
+				free_camera_mouse_look = not free_camera_mouse_look
+			elif not free_camera_active:
+				free_camera_mouse_look = mouse_button.pressed
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if free_camera_mouse_look else Input.MOUSE_MODE_VISIBLE
 			get_viewport().set_input_as_handled()
 	elif game_paused and free_camera_mouse_look and event is InputEventMouseMotion:
@@ -148,6 +172,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if game_paused:
 		return
+	_ensure_shuttle_instance()
 	_update_pre_service_shuttle_hold()
 	_ensure_ai_service_pending()
 	_ensure_player_ai_service_pending()
@@ -160,6 +185,8 @@ func _physics_process(delta: float) -> void:
 	player.show_hit_zone_debug = show_debug_hit_zones
 	opponent.show_hit_zone_debug = show_debug_hit_zones and match_state.rally_active and match_state.turn_side == "opponent" and shuttle.in_flight
 	_update_body_orientation(delta)
+	_update_service_shuttle_follow()
+	_update_shot_runtime(delta)
 	shuttle.update_flight(delta)
 	_update_player_head_look()
 	_update_reception_state()
@@ -167,6 +194,7 @@ func _physics_process(delta: float) -> void:
 	_update_camera(delta)
 	_update_ai()
 	_update_player_ai()
+	_update_shot_debug_overlay()
 	if Input.is_action_just_pressed("serve"):
 		try_serve()
 	if Input.is_action_just_pressed("shot_lob"):
@@ -180,12 +208,28 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("toggle_camera"):
 		_toggle_camera()
 
+func _shuttle_is_valid() -> bool:
+	return shuttle != null and is_instance_valid(shuttle) and not shuttle.is_queued_for_deletion()
+
+func _ensure_shuttle_instance() -> void:
+	if _shuttle_is_valid():
+		return
+	shuttle = Shuttle.new()
+	add_child(shuttle)
+	shuttle.landed.connect(_on_shuttle_landed)
+	shuttle.net_fault.connect(_on_shuttle_net_fault)
+	shuttle_service_attached = false
+
 func _build_world() -> void:
 	_add_visual_gym()
 	_add_gameplay_court()
 	player = PlayerCharacter.new()
 	player.display_name = "Kai"
 	player.accent_color = Color(0.1, 0.2, 1.0)
+	var default_vroid_profile := load(GameConfig.DEFAULT_VROID_AVATAR_PROFILE)
+	if default_vroid_profile is VroidAvatarProfile:
+		player.vroid_avatar_profile = default_vroid_profile as VroidAvatarProfile
+	player.use_deepmotion_jump_smash = true
 	player.speed = 6.4
 	player.acceleration = 20.0
 	player.braking = 26.0
@@ -197,6 +241,7 @@ func _build_world() -> void:
 	player.hit_reach_backhand_side = 0.85
 	player.hit_reach_height = 3.05
 	player.use_directional_movement_animations = true
+	player.use_head_look = false
 	player.court_forward_x = 1.0
 	player.court_right_z = 1.0
 	player.racket_side_z = 1.0
@@ -207,6 +252,9 @@ func _build_world() -> void:
 	opponent = PlayerCharacter.new()
 	opponent.display_name = "Mina"
 	opponent.accent_color = Color(0.95, 0.1, 0.65)
+	if default_vroid_profile is VroidAvatarProfile:
+		opponent.vroid_avatar_profile = default_vroid_profile as VroidAvatarProfile
+	opponent.use_deepmotion_jump_smash = true
 	opponent.speed = 3.85
 	opponent.acceleration = 15.0
 	opponent.braking = 21.0
@@ -219,13 +267,14 @@ func _build_world() -> void:
 	opponent.hit_reach_height = 3.05
 	opponent.use_directional_movement_animations = true
 	opponent.use_movement_animation = true
+	opponent.use_head_look = false
 	opponent.court_forward_x = -1.0
 	opponent.court_right_z = -1.0
 	opponent.racket_side_z = -1.0
 	opponent.turn_speed = 3.5
 	opponent.lock_visual_yaw = true
 	opponent.visual_yaw_offset = 0.0
-	opponent.lock_root_bone = true
+	opponent.lock_root_bone = false
 	opponent.arrive_radius = 0.24
 	add_child(opponent)
 	shuttle = Shuttle.new()
@@ -255,11 +304,18 @@ func _build_world() -> void:
 	hud.camera_preset_selected.connect(_select_camera_preset)
 	hud.camera_preview_changed.connect(_preview_camera_settings)
 	hud.camera_preset_saved.connect(_save_camera_preset)
+	hud.sfx_volume_changed.connect(_set_sfx_volume)
 	hud.set_hitbox_debug(show_debug_hit_zones)
 	hud.set_player_ai(player_ai_enabled)
 	hud.set_difficulty(String(_difficulty_profile()["label"]))
 	hud.set_graphics_mode("Render")
 	hud.set_camera_slot(camera_preset_slot, active_camera_settings)
+	hit_sfx = HitSfx.new()
+	add_child(hit_sfx)
+	hit_sfx.set_sfx_volume(hud.get_sfx_volume())
+	hit_feedback_manager = HitFeedbackManager.new()
+	add_child(hit_feedback_manager)
+	_build_shot_debug_overlay()
 	_add_render_tuning_panel()
 
 func _ensure_runtime_input_actions() -> void:
@@ -275,6 +331,57 @@ func _add_key_action(action_name: StringName, keycode: Key) -> void:
 	var key := InputEventKey.new()
 	key.keycode = keycode
 	InputMap.action_add_event(action_name, key)
+
+func _build_shot_debug_overlay() -> void:
+	shot_debug_label = Label.new()
+	shot_debug_label.name = "ShotRuntimeDebug"
+	shot_debug_label.visible = true
+	shot_debug_label.position = Vector2(18.0, 188.0)
+	shot_debug_label.add_theme_font_size_override("font_size", 13)
+	shot_debug_label.add_theme_color_override("font_color", Color(0.92, 0.96, 1.0, 0.92))
+	shot_debug_label.add_theme_color_override("font_outline_color", Color(0.02, 0.025, 0.03, 0.92))
+	shot_debug_label.add_theme_constant_override("outline_size", 3)
+	hud.add_child(shot_debug_label)
+	_update_shot_debug_overlay()
+
+func _update_shot_debug_overlay() -> void:
+	if shot_debug_label == null:
+		return
+	var side: String = "player"
+	if shot_state_machines.has("opponent"):
+		var opponent_machine: PlayerShotStateMachine = shot_state_machines["opponent"] as PlayerShotStateMachine
+		if opponent_machine != null and opponent_machine.active_shot != null:
+			side = "opponent"
+	var machine: PlayerShotStateMachine = shot_state_machines.get(side, null) as PlayerShotStateMachine
+	var feedback_line: String = last_hit_feedback_text if _now() < last_hit_feedback_until else ""
+	if machine == null or machine.active_shot == null:
+		shot_debug_label.text = "Shot state: Idle\nShot: -\nImpact: -\nRecovery: -%s" % [("\n" + feedback_line) if feedback_line != "" else ""]
+		return
+	var shot_data: ShotData = machine.active_shot
+	var service_line := _service_attach_debug_line(side)
+	shot_debug_label.text = "Side: %s\nShot state: %s\nShot: %s\nImpact: %.2fs\nRecovery: %.2fs%s%s" % [
+		side,
+		String(machine.state_name()),
+		String(shot_data.shot_id),
+		shot_data.impact_time,
+		shot_data.recovery_time,
+		("\n" + feedback_line) if feedback_line != "" else "",
+		service_line
+	]
+
+func _service_attach_debug_line(side: String) -> String:
+	if not pending_shots.has(side):
+		return ""
+	var pending: Dictionary = pending_shots[side]
+	if not GameConfig.is_service_kind(String(pending.get("kind", ""))) or bool(pending.get("impacted", false)):
+		return ""
+	var holder: PlayerCharacter = player if side == "player" else opponent
+	if holder == null or shuttle == null:
+		return "\nService attach: missing"
+	var anchor := holder.get_service_shuttle_anchor()
+	var parent_name := String(shuttle.get_parent().name) if shuttle.get_parent() != null else "none"
+	var distance := shuttle.global_position.distance_to(anchor.global_position) if anchor != null else -1.0
+	return "\nService attach v2: parent=%s dist=%.3f local=%s adj=%s anim=%s" % [parent_name, distance, str(shuttle.position), str(service_adjustment_mode_active), holder.current_real_animation_debug()]
 
 func _add_visual_gym() -> void:
 	if ResourceLoader.exists(GYM_SCENE):
@@ -320,6 +427,17 @@ func try_serve() -> void:
 		return
 	_start_rally_from_server("player", "serve_lob")
 
+func _setup_shot_runtime() -> void:
+	shot_state_machines = {
+		"player": PlayerShotStateMachine.new(),
+		"opponent": PlayerShotStateMachine.new()
+	}
+	for side in shot_state_machines.keys():
+		var machine: PlayerShotStateMachine = shot_state_machines[side] as PlayerShotStateMachine
+		machine.shot_impact.connect(on_shot_impact.bind(String(side)))
+		machine.recovery_start.connect(on_recovery_start.bind(String(side)))
+		machine.recovery_end.connect(on_recovery_end.bind(String(side)))
+
 func try_hit(kind: String) -> void:
 	if not game_started:
 		return
@@ -344,6 +462,7 @@ func try_hit(kind: String) -> void:
 	if match_state.turn_side != "player" or match_state.match_over:
 		return
 	if not _player_can_hit(kind):
+		_play_miss_sfx()
 		_update_hud()
 		return
 	_hit_from_side("player", kind)
@@ -355,7 +474,9 @@ func _start_rally_from_server(side: String, service_kind: String) -> void:
 	rally_start_time = _now()
 	rally_start_server = side
 	rally_start_service_kind = service_kind
-	_detach_shuttle_from_service_hand()
+	_ensure_shuttle_instance()
+	var server: PlayerCharacter = player if side == "player" else opponent
+	_attach_shuttle_to_service_hand(server)
 	_hit_from_side(side, service_kind)
 
 func _player_service_is_locked() -> bool:
@@ -380,16 +501,101 @@ func _hit_from_side(side: String, kind: String) -> void:
 	target = _apply_ai_difficulty_error(side, kind, target)
 	var shot_quality: float = _estimate_shot_quality(kind, target)
 	var recovery_profile: Dictionary = GameConfig.recovery_profile(kind, shot_quality)
-	hitter.play_hit(kind, _should_use_backhand(hitter, kind), float(recovery_profile["swing_recovery_time"]))
 	var profile: Dictionary = GameConfig.shot_profile(kind)
 	profile = profile.duplicate()
 	if service_fault_type == "net" or _should_force_net_fault(side, kind):
 		profile["net_fault"] = true
+	var backhand: bool = _should_use_backhand(hitter, kind)
+	_queue_shot_runtime(side, kind, hitter, backhand, target, profile, service_fault_type, float(recovery_profile["swing_recovery_time"]))
+
+func _queue_shot_runtime(side: String, kind: String, hitter: PlayerCharacter, backhand: bool, target: Vector3, profile: Dictionary, service_fault_type: String, recovery_time: float) -> void:
+	var shot_data: ShotData = ShotDatabase.data_for_gameplay_kind(kind, backhand).duplicate() as ShotData
+	shot_data.recovery_time = max(shot_data.recovery_time, recovery_time)
+	if GameConfig.is_service_kind(kind):
+		service_lock_positions[side] = hitter.position
+	pending_shots[side] = {
+		"side": side,
+		"kind": kind,
+		"hitter": hitter,
+		"target": target,
+		"profile": profile,
+		"service_fault_type": service_fault_type,
+		"shot_data": shot_data,
+		"impacted": false
+	}
+	landing_will_be_out = false
+	hitter.play_hit(kind, backhand, shot_data.total_lock_time(), shot_data.animation_name)
+	var machine: PlayerShotStateMachine = shot_state_machines.get(side, null) as PlayerShotStateMachine
+	if machine != null:
+		machine.start_shot(shot_data)
+
+func _update_shot_runtime(delta: float) -> void:
+	for side in shot_state_machines.keys():
+		var machine: PlayerShotStateMachine = shot_state_machines[side] as PlayerShotStateMachine
+		if machine == null:
+			continue
+		_apply_pre_impact_reposition(String(side), delta)
+		machine.update(delta)
+
+func _apply_pre_impact_reposition(side: String, delta: float) -> void:
+	if not pending_shots.has(side):
+		return
+	var pending: Dictionary = pending_shots[side]
+	if bool(pending.get("impacted", false)):
+		return
+	var hitter: PlayerCharacter = pending["hitter"] as PlayerCharacter
+	var shot_data: ShotData = pending["shot_data"] as ShotData
+	if hitter == null or shot_data == null:
+		return
+	if GameConfig.is_service_kind(String(pending.get("kind", ""))):
+		return
+	var flat_delta: Vector3 = shuttle.global_position - hitter.global_position
+	flat_delta.y = 0.0
+	var distance: float = flat_delta.length()
+	if distance <= 0.08:
+		return
+	var max_step: float = hitter.speed * shot_data.move_speed_scale * 0.18 * delta
+	var step: Vector3 = flat_delta.normalized() * min(distance, max_step)
+	hitter.position += step
+	if side == "player":
+		_clamp_player()
+	else:
+		opponent.position = _clamp_opponent_court_position(opponent.position)
+
+func on_shot_impact(shot_data: ShotData, side: String) -> void:
+	if not pending_shots.has(side):
+		return
+	var pending: Dictionary = pending_shots[side]
+	pending["impacted"] = true
+	pending_shots[side] = pending
+	service_lock_positions.erase(side)
+	_launch_pending_shot(pending, shot_data)
+
+func on_recovery_start(_shot_data: ShotData, _side: String) -> void:
+	pass
+
+func on_recovery_end(_shot_data: ShotData, side: String) -> void:
+	pending_shots.erase(side)
+
+func _launch_pending_shot(pending: Dictionary, shot_data: ShotData) -> void:
+	var side: String = String(pending["side"])
+	var kind: String = String(pending["kind"])
+	var target: Vector3 = pending["target"]
+	var profile: Dictionary = pending["profile"]
+	var service_fault_type: String = String(pending["service_fault_type"])
 	shuttle.apply_shot_visual_settings(_shuttle_visual_settings_for_shot(kind))
+	if GameConfig.is_service_kind(kind):
+		_detach_shuttle_from_service_hand()
 	var contact_position: Vector3 = shuttle.global_position
 	var predicted: Vector3 = shuttle.launch(target, float(profile["duration"]), float(profile["apex"]), profile)
-	var hit_direction: Vector3 = shuttle.velocity.normalized()
-	spawn_racket_impact_fx(contact_position, hit_direction, kind)
+	shuttle.velocity += Vector3(shot_data.shuttle_spin.x, shot_data.shuttle_spin.y, shot_data.shuttle_spin.z) * 0.02
+	if service_fault_type == "technique":
+		_play_miss_sfx()
+	elif hit_feedback_manager != null:
+		hit_feedback_manager.play_hit_feedback(shot_data, contact_position, side)
+	else:
+		play_impact_sound(String(shot_data.shot_id), shot_data.feedback_intensity, side, "fallback")
+		play_impact_flash(contact_position, shot_data.feedback_intensity * shot_data.impact_flash_scale, String(shot_data.shot_id))
 	_show_landing_marker(predicted)
 	if match_state.shuttle_landing_side == "opponent":
 		opponent_reception_target = _opponent_chase_target_from_landing(predicted)
@@ -414,6 +620,42 @@ func _hit_from_side(side: String, kind: String) -> void:
 		player_ai_action_time = _now() + max(0.42, shuttle.flight_duration * 0.74)
 	_update_hud()
 
+func play_impact_flash(position: Vector3, intensity: float, shot_id: String) -> void:
+	var direction: Vector3 = shuttle.velocity.normalized()
+	if direction.length() <= 0.01:
+		direction = Vector3.RIGHT if String(match_state.last_hitter_side) == "player" else Vector3.LEFT
+	spawn_racket_impact_fx(position, direction, _gameplay_kind_from_shot_id(shot_id), intensity)
+
+func play_impact_sound(shot_id: String, _intensity: float, _hitter_side: String, _sound_variant: String = "default") -> void:
+	if hit_sfx == null:
+		return
+	hit_sfx.play_shot(_gameplay_kind_from_shot_id(shot_id))
+
+func boost_shuttle_trail(duration: float, intensity: float) -> void:
+	if shuttle != null and shuttle.has_method("boost_trail"):
+		shuttle.call("boost_trail", duration, intensity)
+
+func apply_camera_pulse(intensity: float, _impact_position: Vector3, _hitter_side: String) -> void:
+	camera_pulse_intensity = max(camera_pulse_intensity, clamp(intensity, 0.0, 2.0))
+	camera_pulse_until = _now() + lerp(0.06, 0.16, clamp(camera_pulse_intensity, 0.0, 1.0))
+
+func show_hit_feedback_debug(shot_id: String, hit_stop_duration: float, feedback_intensity: float) -> void:
+	last_hit_feedback_text = "Feedback: %s | stop %.3fs | %.2f" % [shot_id, hit_stop_duration, feedback_intensity]
+	last_hit_feedback_until = _now() + 0.65
+
+func _gameplay_kind_from_shot_id(shot_id: String) -> String:
+	match shot_id:
+		"smash_forehand":
+			return "smash"
+		"drive_forehand":
+			return "drive"
+		"net_shot":
+			return "drop"
+		"defense_block":
+			return "drive"
+		_:
+			return "lob"
+
 func apply_anime_fx_settings(settings: Dictionary) -> void:
 	anime_fx_settings = settings.duplicate()
 
@@ -422,7 +664,15 @@ func apply_landing_marker_settings(settings: Dictionary) -> void:
 	_apply_landing_marker_material()
 	_update_landing_marker_visual()
 
-func spawn_racket_impact_fx(racket_position: Vector3, hit_direction: Vector3, shot_kind: String) -> void:
+func _set_sfx_volume(value: float) -> void:
+	if hit_sfx != null:
+		hit_sfx.set_sfx_volume(value)
+
+func _play_miss_sfx() -> void:
+	if hit_sfx != null:
+		hit_sfx.play_miss()
+
+func spawn_racket_impact_fx(racket_position: Vector3, hit_direction: Vector3, shot_kind: String, intensity: float = 1.0) -> void:
 	if not bool(anime_fx_settings.get("enabled", true)):
 		return
 	if hit_direction.length() <= 0.01:
@@ -437,7 +687,15 @@ func spawn_racket_impact_fx(racket_position: Vector3, hit_direction: Vector3, sh
 	fx.global_position = racket_position + direction * 0.14
 	add_child(fx)
 	if fx.has_method("setup"):
-		fx.call("setup", direction, _racket_impact_settings_for_shot(shot_kind))
+		fx.call("setup", direction, _scaled_impact_settings(_racket_impact_settings_for_shot(shot_kind), intensity))
+
+func _scaled_impact_settings(settings: Dictionary, intensity: float) -> Dictionary:
+	var scaled: Dictionary = settings.duplicate(true)
+	var safe_intensity: float = clamp(intensity, 0.0, 2.0)
+	scaled["scale"] = float(scaled.get("scale", 1.0)) * lerp(0.78, 1.22, min(safe_intensity, 1.0))
+	scaled["opacity"] = clamp(float(scaled.get("opacity", 0.9)) * lerp(0.75, 1.15, min(safe_intensity, 1.0)), 0.0, 1.0)
+	scaled["duration"] = max(0.06, float(scaled.get("duration", 0.15)) * lerp(0.82, 1.10, min(safe_intensity, 1.0)))
+	return scaled
 
 func _racket_impact_settings_for_shot(shot_kind: String) -> Dictionary:
 	var settings := anime_fx_settings.duplicate()
@@ -504,8 +762,6 @@ func _shuttle_visual_settings_for_shot(shot_kind: String) -> Dictionary:
 	match shot_kind:
 		"smash":
 			return {
-				"trail_color": Color(1.0, 0.30, 0.08, 0.84),
-				"trail_limit": 18,
 				"speed_lines": {
 					"enabled": true,
 					"opacity": 0.98,
@@ -516,8 +772,6 @@ func _shuttle_visual_settings_for_shot(shot_kind: String) -> Dictionary:
 			}
 		"drive", "serve_drive":
 			return {
-				"trail_color": Color(1.0, 0.84, 0.16, 0.78),
-				"trail_limit": 16,
 				"speed_lines": {
 					"enabled": true,
 					"opacity": 0.86,
@@ -528,8 +782,6 @@ func _shuttle_visual_settings_for_shot(shot_kind: String) -> Dictionary:
 			}
 		"drop", "serve_short":
 			return {
-				"trail_color": Color(0.36, 1.0, 0.58, 0.74),
-				"trail_limit": 10,
 				"speed_lines": {
 					"enabled": true,
 					"opacity": 0.68,
@@ -540,8 +792,6 @@ func _shuttle_visual_settings_for_shot(shot_kind: String) -> Dictionary:
 			}
 		"lob", "serve_lob":
 			return {
-				"trail_color": Color(0.44, 0.74, 1.0, 0.72),
-				"trail_limit": 24,
 				"speed_lines": {
 					"enabled": true,
 					"opacity": 0.68,
@@ -551,8 +801,6 @@ func _shuttle_visual_settings_for_shot(shot_kind: String) -> Dictionary:
 				}
 			}
 	return {
-		"trail_color": Color(1.0, 0.92, 0.36, 0.70),
-		"trail_limit": 18,
 		"speed_lines": {
 			"enabled": true,
 			"opacity": 0.76,
@@ -567,7 +815,7 @@ func _racket_contact_position(hitter: PlayerCharacter) -> Vector3:
 	return hitter.global_position + forward
 
 func _show_landing_marker(predicted: Vector3) -> void:
-	landing_marker.position = Vector3(predicted.x, float(landing_marker_settings.get("height", 0.08)), predicted.z)
+	landing_marker.position = Vector3(predicted.x, _landing_marker_y(), predicted.z)
 	landing_marker_requested_visible = true
 	landing_marker_started_at = _now()
 	_apply_landing_marker_material()
@@ -595,8 +843,13 @@ func _update_landing_marker_visual() -> void:
 	var t: float = clamp(visible_age / max(duration, 0.01), 0.0, 1.0)
 	var size_start: float = float(landing_marker_settings.get("size_start", 0.70))
 	var size_end: float = float(landing_marker_settings.get("size_end", 1.0))
-	landing_marker.scale = Vector3.ONE * lerp(size_start, size_end, t)
-	landing_marker.position.y = float(landing_marker_settings.get("height", 0.08))
+	var marker_size: float = lerp(size_start, size_end, t)
+	landing_marker.scale = Vector3(marker_size, 1.0, marker_size)
+	landing_marker.position.y = _landing_marker_y()
+
+func _landing_marker_y() -> float:
+	var height_offset: float = clampf(float(landing_marker_settings.get("height", 0.001)), 0.0, 0.002)
+	return GameConfig.COURT_VISUAL_SURFACE_TOP_Y + height_offset
 
 func _apply_landing_marker_material() -> void:
 	if landing_marker == null:
@@ -723,6 +976,9 @@ func _move_player(delta: float) -> void:
 	if not match_state.rally_active:
 		player.move_towards(match_state.pre_serve_position_for_side("player"), delta)
 		return
+	if _service_is_waiting_for_impact():
+		_hold_player_during_service("player")
+		return
 	var input: Vector2 = _physical_input() + hud.move_vector
 	if camera_mode == "behind":
 		input = Vector2(-input.y, input.x)
@@ -730,6 +986,9 @@ func _move_player(delta: float) -> void:
 	_clamp_player()
 
 func _update_player_ai_movement(delta: float) -> void:
+	if _service_is_waiting_for_impact():
+		_hold_player_during_service("player")
+		return
 	if player.is_hitting:
 		if player_has_recovery_target and match_state.rally_active and match_state.last_hitter_side == "player" and _now() >= player_recovery_unlocked_at:
 			player.recover_towards(_clamp_player_court_position(player_recovery_target), delta, 0.44 * player_recovery_urgency)
@@ -757,6 +1016,10 @@ func _player_chase_target_from_landing(landing: Vector3) -> Vector3:
 	)
 
 func _update_body_orientation(delta: float) -> void:
+	if _service_is_waiting_for_impact():
+		player.force_face_yaw(PI * 0.5, delta)
+		opponent.force_face_yaw(-PI * 0.5, delta)
+		return
 	if match_state.rally_active:
 		player.face_yaw(PI * 0.5, delta)
 		opponent.face_yaw(-PI * 0.5, delta)
@@ -777,6 +1040,9 @@ func _pre_service_look_target(side: String) -> Vector3:
 	return Vector3(x, GameConfig.CHARACTER_GROUND_Y, z)
 
 func _update_opponent(delta: float) -> void:
+	if _service_is_waiting_for_impact():
+		_hold_player_during_service("opponent")
+		return
 	if opponent.is_hitting:
 		if opponent_has_recovery_target and match_state.rally_active and match_state.last_hitter_side == "opponent" and _now() >= opponent_recovery_unlocked_at:
 			opponent.recover_towards(_clamp_opponent_court_position(opponent_recovery_target), delta, 0.44 * opponent_recovery_urgency)
@@ -793,6 +1059,23 @@ func _update_opponent(delta: float) -> void:
 		opponent.recover_towards(_clamp_opponent_court_position(opponent_recovery_target), delta, 0.76 * opponent_recovery_urgency)
 		return
 	opponent.move_towards(target, delta)
+
+func _hold_player_during_service(side: String) -> void:
+	var character := player if side == "player" else opponent
+	var lock_position: Vector3 = service_lock_positions.get(side, character.position)
+	character.hold_at_position(lock_position)
+
+func _service_is_waiting_for_impact() -> bool:
+	return _service_pending_side() != ""
+
+func _service_pending_side() -> String:
+	for pending in pending_shots.values():
+		if not (pending is Dictionary):
+			continue
+		var kind := String((pending as Dictionary).get("kind", ""))
+		if GameConfig.is_service_kind(kind) and not bool((pending as Dictionary).get("impacted", false)):
+			return String((pending as Dictionary).get("side", ""))
+	return ""
 
 func _opponent_chase_target_from_landing(landing: Vector3) -> Vector3:
 	return Vector3(
@@ -961,7 +1244,7 @@ func _update_ai() -> void:
 				if phase < 0.96 and shuttle.in_flight:
 					next_ai_action_time = _now() + 0.08
 				else:
-					status_text = "Mina en retard"
+					status_text = "%s en retard" % _side_name("opponent")
 					_update_hud()
 
 func _update_player_ai() -> void:
@@ -1046,6 +1329,7 @@ func _player_receiver_aggressiveness() -> float:
 func _on_shuttle_landed(_predicted_position: Vector3) -> void:
 	if not match_state.rally_active or landing_pending:
 		return
+	_show_landing_marker(Vector3(shuttle.global_position.x, GameConfig.COURT_VISUAL_SURFACE_TOP_Y, shuttle.global_position.z))
 	opponent_has_reception_target = false
 	player_has_reception_target = false
 	ai_target_marker.visible = false
@@ -1054,7 +1338,7 @@ func _on_shuttle_landed(_predicted_position: Vector3) -> void:
 	landing_reason = "Faute service" if landing_will_be_out and GameConfig.is_service_kind(match_state.last_shot_kind) else ("Faute dehors" if landing_will_be_out else "Point")
 	status_text = landing_reason
 	landing_pending = true
-	landing_resolve_time = _now() + 0.45
+	landing_resolve_time = _now() + 1.0
 	_update_hud()
 
 func _on_shuttle_net_fault() -> void:
@@ -1068,7 +1352,7 @@ func _on_shuttle_net_fault() -> void:
 	landing_reason = "Faute service" if GameConfig.is_service_kind(match_state.last_shot_kind) else "Faute filet"
 	status_text = landing_reason
 	landing_pending = true
-	landing_resolve_time = _now() + 0.35
+	landing_resolve_time = _now() + 1.0
 	_update_hud()
 
 func _update_landing_resolution() -> void:
@@ -1081,7 +1365,7 @@ func _update_landing_resolution() -> void:
 	if set_winner != "":
 		status_text = "Match gagne" if match_state.match_over and set_winner == "player" else ("Match perdu" if match_state.match_over else "Set termine")
 	else:
-		status_text = "%s %s" % [landing_reason, "Kai" if landing_winner == "player" else "Mina"]
+		status_text = "%s %s" % [landing_reason, _side_name(landing_winner)]
 	_reset_for_serve()
 	_update_hud()
 	if match_state.server_side == "opponent" and not match_state.set_over and not match_state.match_over:
@@ -1111,8 +1395,16 @@ func _record_ai_match_point() -> void:
 		status_text = "Stats non enregistrees"
 
 func _reset_for_serve() -> void:
+	_detach_shuttle_from_service_hand()
+	_ensure_shuttle_instance()
 	player.finish_hit()
 	opponent.finish_hit()
+	pending_shots.clear()
+	service_lock_positions.clear()
+	for side in shot_state_machines.keys():
+		var machine: PlayerShotStateMachine = shot_state_machines[side] as PlayerShotStateMachine
+		if machine != null:
+			machine.force_idle()
 	opponent_has_reception_target = false
 	opponent_has_recovery_target = false
 	player_has_reception_target = false
@@ -1128,51 +1420,41 @@ func _reset_for_serve() -> void:
 	hud.set_timing("")
 
 func _update_pre_service_shuttle_hold() -> void:
-	if match_state.rally_active or shuttle == null:
+	if match_state.rally_active:
 		return
+	_ensure_shuttle_instance()
 	var holder: PlayerCharacter = player if match_state.server_side == "player" else opponent
 	_attach_shuttle_to_service_hand(holder)
 
-func _attach_shuttle_to_service_hand(holder: PlayerCharacter) -> void:
-	if holder == null or shuttle == null:
+func _update_service_shuttle_follow() -> void:
+	var side := _service_pending_side()
+	if side == "":
 		return
+	var holder: PlayerCharacter = player if side == "player" else opponent
+	_attach_shuttle_to_service_hand(holder)
+
+func _attach_shuttle_to_service_hand(holder: PlayerCharacter) -> void:
+	if holder == null:
+		return
+	_ensure_shuttle_instance()
 	var anchor := holder.get_service_shuttle_anchor()
 	if anchor == null:
-		shuttle.set_service_hold_position(_service_shuttle_hold_position(holder))
 		return
-	if shuttle.get_parent() != self:
-		var world_transform := shuttle.global_transform
-		if shuttle.get_parent() != null:
-			shuttle.get_parent().remove_child(shuttle)
-		add_child(shuttle)
-		shuttle.global_transform = world_transform
+	holder.apply_service_shuttle_attachment_settings(_service_settings_for_holder(holder))
+	if shuttle.get_parent() != anchor:
+		shuttle.reparent(anchor, false)
 	shuttle_service_attached = true
-	var settings := _service_settings_for_holder(holder)
-	var local_offset := Vector3(
-		float(settings["forward"]),
-		float(settings["height"]),
-		float(settings["lateral"])
-	)
-	if shuttle.has_method("set_service_hold_rotation"):
-		shuttle.call("set_service_hold_rotation", Vector3(
-			float(settings["rot_x"]),
-			float(settings["rot_y"]),
-			float(settings["rot_z"])
-		))
-	shuttle.set_service_hold_position(anchor.global_transform * local_offset)
+	shuttle.set_service_hold_position(Vector3.ZERO)
 	shuttle.scale = Vector3.ONE
 
 func _detach_shuttle_from_service_hand() -> void:
-	if shuttle == null or not shuttle_service_attached:
+	if not _shuttle_is_valid():
+		shuttle_service_attached = false
 		return
+	if not shuttle_service_attached:
+		return
+	shuttle.reparent(self, true)
 	shuttle_service_attached = false
-
-func _service_shuttle_hold_position(holder: PlayerCharacter) -> Vector3:
-	var settings := _service_settings_for_holder(holder)
-	var forward_offset: float = holder.court_forward_x * float(settings["forward"])
-	var free_hand_offset: float = -holder.racket_side_z * float(settings["lateral"])
-	var height_offset: float = float(settings["height"])
-	return holder.global_position + Vector3(forward_offset, height_offset, free_hand_offset)
 
 func apply_service_shuttle_hold_settings(settings: Dictionary) -> void:
 	for side in ["player", "opponent"]:
@@ -1187,6 +1469,76 @@ func apply_service_shuttle_hold_settings(settings: Dictionary) -> void:
 		service_shuttle_hold_settings_by_side[side] = current
 	_update_pre_service_shuttle_hold()
 
+func apply_service_racket_settings(settings: Dictionary) -> void:
+	var player_racket_settings := _service_racket_settings_for_side(settings, "kai")
+	if player != null:
+		player.apply_racket_attachment_settings(player_racket_settings)
+	if opponent != null:
+		opponent.apply_racket_attachment_settings(player_racket_settings)
+
+func apply_service_adjustment_mode(settings: Dictionary) -> void:
+	if not bool(settings.get("enabled", false)):
+		if service_adjustment_mode_active:
+			service_adjustment_mode_active = false
+			service_adjustment_server_side = ""
+			_detach_shuttle_from_service_hand()
+			game_paused = false
+			_set_character_animations_paused(false)
+			status_text = "Reprise"
+			_update_hud()
+		return
+	_ensure_shuttle_instance()
+	var setup_required := not service_adjustment_mode_active or service_adjustment_server_side != match_state.server_side
+	if setup_required:
+		service_adjustment_mode_active = true
+		service_adjustment_server_side = match_state.server_side
+		_detach_shuttle_from_service_hand()
+	if setup_required and match_state.rally_active:
+		match_state.rally_active = false
+		pending_shots.clear()
+		service_lock_positions.clear()
+		for side in shot_state_machines.keys():
+			var machine: PlayerShotStateMachine = shot_state_machines[side] as PlayerShotStateMachine
+			if machine != null:
+				machine.force_idle()
+		player_ai_action_time = -1.0
+		ai_serve_time = -1.0
+		player_ai_serve_time = -1.0
+		shuttle.in_flight = false
+	if setup_required and player != null:
+		player.position = match_state.pre_serve_position_for_side("player")
+		player.velocity = Vector3.ZERO
+		player.finish_hit()
+	if setup_required and opponent != null:
+		opponent.position = match_state.pre_serve_position_for_side("opponent")
+		opponent.velocity = Vector3.ZERO
+		opponent.finish_hit()
+	game_paused = true
+	free_camera_active = false
+	free_camera_mouse_look = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var holder: PlayerCharacter = player if match_state.server_side == "player" else opponent
+	if holder != null:
+		_attach_shuttle_to_service_hand(holder)
+		holder.preview_service_pose(float(settings.get("time", 1.0)))
+	_attach_shuttle_to_service_hand(holder)
+	_set_character_animations_paused(true)
+	status_text = "Reglage service"
+	_update_hud()
+
+func _service_racket_settings_for_side(settings: Dictionary, prefix: String) -> Dictionary:
+	return {
+		"grip_rot_x": float(settings.get("%s_racket_grip_rot_x" % prefix, 0.0)),
+		"grip_rot_y": float(settings.get("%s_racket_grip_rot_y" % prefix, 0.0)),
+		"grip_rot_z": float(settings.get("%s_racket_grip_rot_z" % prefix, 90.0)),
+		"offset_x": float(settings.get("%s_racket_offset_x" % prefix, 0.07)),
+		"offset_y": float(settings.get("%s_racket_offset_y" % prefix, -0.11)),
+		"offset_z": float(settings.get("%s_racket_offset_z" % prefix, -0.03)),
+		"offset_rot_x": float(settings.get("%s_racket_offset_rot_x" % prefix, 5.0)),
+		"offset_rot_y": float(settings.get("%s_racket_offset_rot_y" % prefix, 10.0)),
+		"offset_rot_z": float(settings.get("%s_racket_offset_rot_z" % prefix, 0.0))
+	}
+
 func _service_settings_for_holder(holder: PlayerCharacter) -> Dictionary:
 	return _service_settings_for_side("opponent" if holder == opponent else "player")
 
@@ -1199,7 +1551,7 @@ func _ensure_ai_service_pending() -> void:
 	if match_state.match_over or match_state.set_over or match_state.rally_active:
 		return
 	if match_state.server_side == "opponent" and ai_serve_time < 0.0:
-		status_text = "Service Mina"
+		status_text = "Service " + _side_name("opponent")
 		ai_serve_time = _now() + 0.9
 		_update_hud()
 
@@ -1207,7 +1559,7 @@ func _ensure_player_ai_service_pending() -> void:
 	if not player_ai_enabled or match_state.match_over or match_state.set_over or match_state.rally_active:
 		return
 	if match_state.server_side == "player" and player_ai_serve_time < 0.0:
-		status_text = "Service Kai IA"
+		status_text = "Service %s IA" % _side_name("player")
 		player_ai_serve_time = _now() + 0.9
 		_update_hud()
 
@@ -1229,7 +1581,7 @@ func _player_can_hit(kind: String) -> bool:
 	return true
 
 func _character_can_intercept(character: PlayerCharacter, reach_bonus: float, vertical_reach: float) -> bool:
-	return _point_inside_character_hit_zone(character, shuttle.position, reach_bonus, vertical_reach)
+	return _point_inside_character_hit_zone(character, shuttle.global_position, reach_bonus, vertical_reach)
 
 func _point_inside_character_hit_zone(character: PlayerCharacter, point: Vector3, reach_bonus: float, vertical_reach: float) -> bool:
 	var forward: float = (point.x - character.global_position.x) * character.court_forward_x
@@ -1246,20 +1598,39 @@ func _point_inside_character_hit_zone(character: PlayerCharacter, point: Vector3
 	)
 
 func _update_player_head_look() -> void:
-	var head_look_active: bool = match_state.rally_active or shuttle.in_flight
+	player.set_head_look_target(shuttle.global_position, false)
+	opponent.set_head_look_target(shuttle.global_position, false)
+	return
+	var shuttle_target := shuttle.global_position
+	var head_look_active: bool = (match_state.rally_active or shuttle.in_flight) and _head_look_target_is_valid(shuttle_target)
 	if not head_look_active:
-		player.set_head_look_target(shuttle.global_position, false)
-		opponent.set_head_look_target(shuttle.global_position, false)
+		player.set_head_look_target(shuttle_target, false)
+		opponent.set_head_look_target(shuttle_target, false)
 		return
 	var aimed_point: Vector3 = landing_marker.global_position + Vector3(0.0, 0.28, 0.0)
-	var player_target: Vector3 = shuttle.global_position
-	var opponent_target: Vector3 = shuttle.global_position
+	var player_target: Vector3 = shuttle_target
+	var opponent_target: Vector3 = shuttle_target
 	if match_state.last_hitter_side == "player" and player.is_hitting:
 		player_target = aimed_point
 	if match_state.last_hitter_side == "opponent" and opponent.is_hitting:
 		opponent_target = aimed_point
-	player.set_head_look_target(player_target, true)
-	opponent.set_head_look_target(opponent_target, true)
+	player.set_head_look_target(player_target, _character_can_track_head_target(player, player_target))
+	opponent.set_head_look_target(opponent_target, _character_can_track_head_target(opponent, opponent_target))
+
+func _head_look_target_is_valid(target: Vector3) -> bool:
+	return target.y > GameConfig.CHARACTER_GROUND_Y + 0.34
+
+func _character_can_track_head_target(character: PlayerCharacter, target: Vector3) -> bool:
+	if character == null:
+		return false
+	if not _head_look_target_is_valid(target):
+		return false
+	var direction := target - character.global_position
+	var horizontal_distance := Vector2(direction.x, direction.z).length()
+	if horizontal_distance > 10.5:
+		return false
+	var forward_amount: float = direction.x * character.court_forward_x
+	return forward_amount > -0.55
 
 func _update_reception_state() -> void:
 	if not match_state.rally_active or not shuttle.in_flight or match_state.turn_side != "player":
@@ -1356,6 +1727,7 @@ func _start_game(menu_settings: Dictionary) -> void:
 	match_state.mode = String(menu_settings.get("mode", "singles"))
 	player_ai_enabled = bool(menu_settings.get("player_ai_enabled", false))
 	difficulty_level = String(menu_settings.get("difficulty", difficulty_level))
+	_apply_selected_profiles()
 	var start_camera_slot: int = int(menu_settings.get("camera_slot", 0))
 	player_ai_action_time = -1.0
 	player_ai_serve_time = -1.0
@@ -1363,12 +1735,16 @@ func _start_game(menu_settings: Dictionary) -> void:
 	next_ai_action_time = -1.0
 	game_started = true
 	game_paused = false
+	service_adjustment_mode_active = false
+	service_adjustment_server_side = ""
+	free_camera_active = false
 	player_service_unlocked_at = _now() + 2.0
 	free_camera_mouse_look = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_set_character_animations_paused(false)
 	status_text = "Pret a servir"
 	hud.hide_menus()
+	hud.setup_profiles(player_profile, opponent_profile)
 	hud.set_player_ai(player_ai_enabled)
 	hud.set_difficulty(String(_difficulty_profile()["label"]))
 	_reset_for_serve()
@@ -1377,10 +1753,41 @@ func _start_game(menu_settings: Dictionary) -> void:
 	if player_ai_enabled and match_state.server_side == "player":
 		player_ai_serve_time = player_service_unlocked_at
 
+func _apply_selected_profiles() -> void:
+	var selection := get_node_or_null("/root/GameSelection")
+	if selection != null:
+		player_profile = selection.get_player_1()
+		opponent_profile = selection.get_player_2()
+	if player_profile == null:
+		player_profile = load("res://data/players/kai.tres")
+	if opponent_profile == null:
+		opponent_profile = load("res://data/players/mina.tres")
+	_restore_render_materials_before_profile()
+	if player != null:
+		player.apply_profile(player_profile)
+	if opponent != null:
+		opponent.apply_profile(opponent_profile)
+	_reapply_render_tuning_deferred()
+
+func _restore_render_materials_before_profile() -> void:
+	if render_tuning_panel != null and render_tuning_panel.has_method("restore_original_materials"):
+		render_tuning_panel.call("restore_original_materials")
+
+func _reapply_render_tuning_deferred() -> void:
+	await get_tree().process_frame
+	if render_tuning_panel != null and render_tuning_panel.has_method("_resolve_targets"):
+		render_tuning_panel.call("_resolve_targets")
+	if render_tuning_panel != null and render_tuning_panel.has_method("_apply_all"):
+		render_tuning_panel.call("_apply_all")
+
 func _resume_game() -> void:
 	if not game_started:
 		return
+	service_adjustment_mode_active = false
+	service_adjustment_server_side = ""
+	_detach_shuttle_from_service_hand()
 	game_paused = false
+	free_camera_active = false
 	free_camera_mouse_look = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_set_character_animations_paused(false)
@@ -1392,6 +1799,7 @@ func _show_free_camera_pause() -> void:
 	if not game_started:
 		return
 	game_paused = true
+	free_camera_active = true
 	free_camera_mouse_look = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	free_camera_angles = Vector2(camera.rotation_degrees.x, camera.rotation_degrees.y)
@@ -1403,6 +1811,9 @@ func _show_free_camera_pause() -> void:
 func _return_to_main_menu() -> void:
 	game_started = false
 	game_paused = true
+	service_adjustment_mode_active = false
+	service_adjustment_server_side = ""
+	free_camera_active = false
 	free_camera_mouse_look = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	match_state = MatchState.new()
@@ -1417,6 +1828,7 @@ func _quit_game() -> void:
 
 func _toggle_pause() -> void:
 	game_paused = not game_paused
+	free_camera_active = false
 	free_camera_mouse_look = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_set_character_animations_paused(game_paused)
@@ -1442,6 +1854,11 @@ func _toggle_hitbox_debug() -> void:
 	show_debug_hit_zones = not show_debug_hit_zones
 	hud.set_hitbox_debug(show_debug_hit_zones)
 
+func apply_hitbox_debug_settings(settings: Dictionary) -> void:
+	show_debug_hit_zones = bool(settings.get("enabled", show_debug_hit_zones))
+	if hud != null:
+		hud.set_hitbox_debug(show_debug_hit_zones)
+
 func _toggle_player_ai() -> void:
 	player_ai_enabled = not player_ai_enabled
 	player_ai_action_time = -1.0
@@ -1449,7 +1866,7 @@ func _toggle_player_ai() -> void:
 	hud.move_vector = Vector2.ZERO
 	hud.aim_vector = Vector2.ZERO
 	hud.set_player_ai(player_ai_enabled)
-	status_text = "Kai IA" if player_ai_enabled else "Kai joueur"
+	status_text = "%s IA" % _side_name("player") if player_ai_enabled else "%s joueur" % _side_name("player")
 	_update_hud()
 
 func _toggle_difficulty() -> void:
@@ -1490,18 +1907,47 @@ func _build_camera() -> void:
 func _update_free_camera(delta: float) -> void:
 	GameCameraController.update_free_camera(camera, delta, free_camera_speed)
 
+func _update_free_camera_keyboard_look(delta: float) -> void:
+	if not free_camera_active:
+		return
+	var yaw_input := 0.0
+	var pitch_input := 0.0
+	if Input.is_key_pressed(KEY_KP_4):
+		yaw_input += 1.0
+	if Input.is_key_pressed(KEY_KP_6):
+		yaw_input -= 1.0
+	if Input.is_key_pressed(KEY_KP_8):
+		pitch_input += 1.0
+	if Input.is_key_pressed(KEY_KP_2):
+		pitch_input -= 1.0
+	if absf(yaw_input) < 0.01 and absf(pitch_input) < 0.01:
+		return
+	free_camera_angles.x = clampf(free_camera_angles.x + pitch_input * free_camera_turn_speed * delta, -86.0, 86.0)
+	free_camera_angles.y += yaw_input * free_camera_turn_speed * delta
+	camera.rotation_degrees = Vector3(free_camera_angles.x, free_camera_angles.y, 0.0)
+
 func _update_camera(delta: float) -> void:
 	if game_paused:
 		return
 	GameCameraController.update_follow_camera(
 		camera,
 		player.position,
-		shuttle.position,
+		shuttle.global_position,
 		camera_mode,
 		active_camera_settings,
 		match_state.active_half_width(),
 		delta
 	)
+	_apply_camera_pulse_offset()
+
+func _apply_camera_pulse_offset() -> void:
+	var now: float = _now()
+	if now > camera_pulse_until or camera_pulse_intensity <= 0.001:
+		camera_pulse_intensity = 0.0
+		return
+	var remaining: float = clamp((camera_pulse_until - now) / 0.16, 0.0, 1.0)
+	var amplitude: float = 0.018 * camera_pulse_intensity * remaining
+	camera.position += Vector3(randf_range(-amplitude, amplitude), randf_range(-amplitude * 0.45, amplitude * 0.45), 0.0)
 
 func _clamp_camera_position(value: Vector3) -> Vector3:
 	return GameCameraController.clamp_position(value)
@@ -1510,13 +1956,31 @@ func _default_camera_presets() -> Array:
 	return CameraPresetStore.default_presets()
 
 func _load_camera_presets() -> void:
-	camera_presets = CameraPresetStore.load_presets(camera_settings_path)
+	var camera_load_path := camera_settings_path
+	var legacy_path := _legacy_user_file_path("camera_presets.cfg")
+	var migrated_from := ""
+	if FileAccess.file_exists(camera_settings_path):
+		var current_config := ConfigFile.new()
+		current_config.load(camera_settings_path)
+		if legacy_path != "" and String(current_config.get_value("meta", LEGACY_MIGRATION_KEY, "")) != LEGACY_PROJECT_USER_DIR:
+			camera_load_path = legacy_path
+			migrated_from = LEGACY_PROJECT_USER_DIR
+	elif legacy_path != "":
+		camera_load_path = legacy_path
+		migrated_from = LEGACY_PROJECT_USER_DIR
+	camera_presets = CameraPresetStore.load_presets(camera_load_path)
 	camera_preset_slot = 0
 	camera_preset_slot = clamp(camera_preset_slot, 0, camera_presets.size() - 1)
 	active_camera_settings = (camera_presets[camera_preset_slot] as Dictionary).duplicate()
+	if camera_load_path != camera_settings_path:
+		_write_camera_presets(migrated_from)
 
-func _write_camera_presets() -> void:
-	CameraPresetStore.save_presets(camera_settings_path, camera_preset_slot, camera_presets)
+func _write_camera_presets(migrated_from := "") -> void:
+	if migrated_from == "" and FileAccess.file_exists(camera_settings_path):
+		var config := ConfigFile.new()
+		if config.load(camera_settings_path) == OK:
+			migrated_from = String(config.get_value("meta", LEGACY_MIGRATION_KEY, ""))
+	CameraPresetStore.save_presets(camera_settings_path, camera_preset_slot, camera_presets, migrated_from)
 
 func _select_camera_preset(slot: int) -> void:
 	if slot < 0 or slot >= camera_presets.size():
@@ -1556,14 +2020,22 @@ func _save_camera_preset(slot: int, settings: Dictionary) -> void:
 func _normalized_camera_settings(settings: Dictionary) -> Dictionary:
 	return CameraPresetStore.normalized(settings)
 
+func _legacy_user_file_path(file_name: String) -> String:
+	var current_dir := ProjectSettings.globalize_path("user://")
+	if current_dir == "":
+		return ""
+	var legacy_path := current_dir.get_base_dir().path_join(LEGACY_PROJECT_USER_DIR).path_join(file_name)
+	return legacy_path if FileAccess.file_exists(legacy_path) else ""
+
 func _make_landing_marker() -> MeshInstance3D:
 	var node := MeshInstance3D.new()
 	node.name = "LandingMarker"
 	var mesh := CylinderMesh.new()
 	mesh.top_radius = 0.24
 	mesh.bottom_radius = 0.24
-	mesh.height = 0.025
+	mesh.height = 0.008
 	node.mesh = mesh
+	node.position.y = _landing_marker_y()
 	node.material_override = GameConfig.material(Color(0.98, 0.82, 0.18))
 	return node
 
@@ -1588,7 +2060,7 @@ func _service_kind_from_shot(kind: String) -> String:
 			return "serve_lob"
 
 func _shot_label(side: String, kind: String) -> String:
-	var who: String = "Kai" if side == "player" else "Mina"
+	var who: String = _side_name(side)
 	match kind:
 		"serve_short":
 			return "Service court %s" % who
@@ -1625,8 +2097,18 @@ func _describe_aim(aim: Vector2) -> String:
 	return "%s %s" % [depth, lane]
 
 func _update_hud() -> void:
-	var rally: String = "Rally %d" % match_state.rally_count if match_state.rally_active else ("Service Kai" if match_state.server_side == "player" else "Service Mina")
-	hud.update_match(match_state.mode, status_text, rally, match_state.player_score, match_state.player_sets, match_state.opponent_score, match_state.opponent_sets)
+	var rally: String = "Rally %d" % match_state.rally_count if match_state.rally_active else ("Service " + _side_name(match_state.server_side))
+	var server_name: String = _side_name(match_state.server_side)
+	var point_winner_name: String = ""
+	if not landing_pending and status_text.begins_with("Point"):
+		point_winner_name = _side_name(landing_winner) if landing_winner != "" else ""
+	hud.update_match(match_state.mode, status_text, rally, match_state.player_score, match_state.player_sets, match_state.opponent_score, match_state.opponent_sets, server_name, point_winner_name)
+
+func _side_name(side: String) -> String:
+	var profile := player_profile if side == "player" else opponent_profile
+	if profile != null:
+		return profile.safe_name()
+	return "Kai" if side == "player" else "Mina"
 
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0

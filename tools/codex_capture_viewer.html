@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shuttle Rush - Codex Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      background: #07090d;
+      color: #f4f7fb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #07090d;
+    }
+
+    .shell {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+      background: rgba(12, 16, 23, 0.94);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: rgba(244, 247, 251, 0.72);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: #29e68b;
+      box-shadow: 0 0 16px rgba(41, 230, 139, 0.8);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 300px;
+      min-height: 0;
+    }
+
+    .stage {
+      display: grid;
+      place-items: center;
+      min-width: 0;
+      padding: 16px;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+        #05070b;
+      background-size: 40px 40px;
+    }
+
+    .capture {
+      width: min(100%, 1280px);
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      background: #000;
+      border: 1px solid rgba(255, 255, 255, 0.13);
+      box-shadow: 0 18px 70px rgba(0, 0, 0, 0.38);
+    }
+
+    aside {
+      padding: 16px;
+      border-left: 1px solid rgba(255, 255, 255, 0.11);
+      background: #0d1118;
+    }
+
+    .panel-title {
+      margin: 0 0 12px;
+      font-size: 13px;
+      color: rgba(244, 247, 251, 0.68);
+      text-transform: uppercase;
+    }
+
+    .thumb {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: #000;
+      cursor: pointer;
+    }
+
+    .thumb + .thumb {
+      margin-top: 14px;
+    }
+
+    .label {
+      margin: 7px 0 14px;
+      color: rgba(244, 247, 251, 0.78);
+      font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        border-left: 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.11);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <h1>Shuttle Rush - rendu Codex</h1>
+      <div class="meta">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="status">actualisation auto</span>
+      </div>
+    </header>
+    <main>
+      <section class="stage">
+        <img id="mainCapture" class="capture" alt="Capture principale du jeu">
+      </section>
+      <aside>
+        <p class="panel-title">Vues</p>
+        <img id="matchThumb" class="thumb" alt="Capture partie">
+        <p class="label">Partie</p>
+        <img id="retargetThumb" class="thumb" alt="Capture retarget VRoid">
+        <p class="label">Retarget VRoid</p>
+        <img id="deepmotionThumb" class="thumb" alt="Capture DeepMotion">
+        <p class="label">DeepMotion clip</p>
+        <img id="vroidDeepmotionThumb" class="thumb" alt="Capture VRoid anime par DeepMotion">
+        <p class="label">VRoid + DeepMotion</p>
+        <img id="vroidSmashThumb" class="thumb" alt="Capture smash DeepMotion sur VRoid">
+        <p class="label">VRoid + Smash</p>
+        <img id="vroidSmashAnimThumb" class="thumb" alt="Animation smash DeepMotion sur VRoid">
+        <p class="label">VRoid + Smash animé</p>
+        <img id="vroidSmashCourtThumb" class="thumb" alt="Smash VRoid sur terrain">
+        <p class="label">VRoid + Smash terrain</p>
+        <img id="vroidPlayerSmashThumb" class="thumb" alt="Smash VRoid via joueur">
+        <p class="label">VRoid joueur + Smash</p>
+        <img id="avatarThumb" class="thumb" alt="Capture avatar">
+        <p class="label">Avatar</p>
+        <img id="menuThumb" class="thumb" alt="Capture menu">
+        <p class="label">Menu</p>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const captures = {
+      match: "../codex_captures/godot_match_capture.png",
+      retarget: "../codex_captures/godot_retarget_capture.png",
+      deepmotion: "../codex_captures/godot_deepmotion_capture.png",
+      vroidDeepmotion: "../codex_captures/godot_vroid_deepmotion_capture.png",
+      vroidSmash: "../codex_captures/godot_vroid_smash_capture.png",
+      vroidSmashAnim: "../codex_captures/vroid_smash_sequence/frame_000.png",
+      vroidSmashCourt: "../codex_captures/godot_vroid_smash_court_capture.png",
+      vroidPlayerSmash: "../codex_captures/godot_vroid_player_smash_capture.png",
+      avatar: "../codex_captures/godot_avatar_capture.png",
+      menu: "../codex_captures/godot_menu_capture.png"
+    };
+
+    const animations = {
+      vroidSmashAnim: {
+        base: "../codex_captures/vroid_smash_sequence/frame_",
+        frames: 54,
+        fps: 18
+      }
+    };
+
+    const mainCapture = document.getElementById("mainCapture");
+    const matchThumb = document.getElementById("matchThumb");
+    const retargetThumb = document.getElementById("retargetThumb");
+    const deepmotionThumb = document.getElementById("deepmotionThumb");
+    const vroidDeepmotionThumb = document.getElementById("vroidDeepmotionThumb");
+    const vroidSmashThumb = document.getElementById("vroidSmashThumb");
+    const vroidSmashAnimThumb = document.getElementById("vroidSmashAnimThumb");
+    const vroidSmashCourtThumb = document.getElementById("vroidSmashCourtThumb");
+    const vroidPlayerSmashThumb = document.getElementById("vroidPlayerSmashThumb");
+    const avatarThumb = document.getElementById("avatarThumb");
+    const menuThumb = document.getElementById("menuThumb");
+    const status = document.getElementById("status");
+    let current = "match";
+    let animationTimer = 0;
+    let animationFrame = 0;
+
+    function versioned(path) {
+      return `${path}?v=${Date.now()}`;
+    }
+
+    function framePath(animation, frame) {
+      return `${animation.base}${String(frame).padStart(3, "0")}.png`;
+    }
+
+    function setCurrent(next) {
+      current = next;
+      animationFrame = 0;
+      refresh();
+      document.querySelector(".stage").scrollIntoView({ block: "start" });
+    }
+
+    function stopAnimation() {
+      if (animationTimer) {
+        clearInterval(animationTimer);
+        animationTimer = 0;
+      }
+    }
+
+    function startAnimation(animation) {
+      stopAnimation();
+      mainCapture.src = versioned(framePath(animation, 0));
+      animationTimer = setInterval(() => {
+        animationFrame = (animationFrame + 1) % animation.frames;
+        mainCapture.src = framePath(animation, animationFrame);
+        status.textContent = `anime ${new Date().toLocaleTimeString("fr-FR")}`;
+      }, 1000 / animation.fps);
+    }
+
+    function refresh() {
+      const animation = animations[current];
+      if (animation) {
+        startAnimation(animation);
+      } else {
+        stopAnimation();
+        mainCapture.src = versioned(captures[current]);
+      }
+      matchThumb.src = versioned(captures.match);
+      retargetThumb.src = versioned(captures.retarget);
+      deepmotionThumb.src = versioned(captures.deepmotion);
+      vroidDeepmotionThumb.src = versioned(captures.vroidDeepmotion);
+      vroidSmashThumb.src = versioned(captures.vroidSmash);
+      vroidSmashAnimThumb.src = versioned("../codex_captures/vroid_smash_sequence/frame_027.png");
+      vroidSmashCourtThumb.src = versioned(captures.vroidSmashCourt);
+      vroidPlayerSmashThumb.src = versioned(captures.vroidPlayerSmash);
+      avatarThumb.src = versioned(captures.avatar);
+      menuThumb.src = versioned(captures.menu);
+      status.textContent = `actualise ${new Date().toLocaleTimeString("fr-FR")}`;
+    }
+
+    matchThumb.addEventListener("click", () => {
+      setCurrent("match");
+    });
+
+    retargetThumb.addEventListener("click", () => {
+      setCurrent("retarget");
+    });
+
+    deepmotionThumb.addEventListener("click", () => {
+      setCurrent("deepmotion");
+    });
+
+    vroidDeepmotionThumb.addEventListener("click", () => {
+      setCurrent("vroidDeepmotion");
+    });
+
+    vroidSmashThumb.addEventListener("click", () => {
+      setCurrent("vroidSmash");
+    });
+
+    vroidSmashAnimThumb.addEventListener("click", () => {
+      setCurrent("vroidSmashAnim");
+    });
+
+    vroidSmashCourtThumb.addEventListener("click", () => {
+      setCurrent("vroidSmashCourt");
+    });
+
+    vroidPlayerSmashThumb.addEventListener("click", () => {
+      setCurrent("vroidPlayerSmash");
+    });
+
+    avatarThumb.addEventListener("click", () => {
+      setCurrent("avatar");
+    });
+
+    menuThumb.addEventListener("click", () => {
+      setCurrent("menu");
+    });
+
+    refresh();
+    setInterval(() => {
+      if (!animations[current]) {
+        refresh();
+      }
+    }, 2000);
+  </script>
+</body>
+</html>

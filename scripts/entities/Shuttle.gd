@@ -13,15 +13,22 @@ var flight_duration := 1.0
 var drag := 0.972
 var gravity := 8.6
 var guidance := 0.18
+var ground_bounce_active := false
+var ground_bounce_count := 0
+var ground_bounce_energy := 0.34
+var ground_bounce_horizontal_damping := 0.58
+var ground_bounce_min_vertical_speed := 0.55
+var ground_bounce_max_count := 3
+var net_reaction_active := false
+var net_reaction_horizontal_damping := 0.22
+var net_reaction_drop_speed := 0.85
+var net_reaction_tumble_speed := 11.0
 var shuttle_model: Node3D = null
 var last_position := Vector3.ZERO
 var net_fault_checked := false
 var force_net_fault := false
-var trail_marker: MeshInstance3D = null
 var speed_lines: ShuttleSpeedLines = null
 var impact_marker: MeshInstance3D = null
-var trail_mesh := ImmediateMesh.new()
-var trail_points: Array[Vector3] = []
 var impact_started_at := -10.0
 var impact_enabled := true
 var impact_delay := 0.0
@@ -29,24 +36,20 @@ var impact_duration := 0.18
 var impact_size_start := 0.38
 var impact_size_end := 1.38
 var impact_color := Color(1.0, 0.82, 0.18, 0.52)
-var trail_color := Color(1.0, 0.92, 0.36, 0.56)
-const TRAIL_POINT_LIMIT := 18
-var trail_point_limit := TRAIL_POINT_LIMIT
 var default_model_rotation_degrees := Vector3(90.0, 0.0, 0.0)
 var service_hold_rotation_degrees := Vector3.ZERO
-
-func set_trail_limit(value: int) -> void:
-	trail_point_limit = clamp(value, 2, 36)
+const IMPORTED_MODEL_SCALE := 1.6875
+const FALLBACK_RADIUS := 0.0675
+const FALLBACK_HEIGHT := 0.135
+const GROUND_VISUAL_CLEARANCE := 0.045
 
 func apply_shot_visual_settings(settings: Dictionary) -> void:
-	set_trail_limit(int(settings.get("trail_limit", trail_point_limit)))
-	var trail_color_value: Variant = settings.get("trail_color", trail_color)
-	if trail_color_value is Color:
-		trail_color = trail_color_value
-		if trail_marker != null:
-			trail_marker.material_override = GameConfig.material(trail_color)
 	if speed_lines != null:
 		speed_lines.apply_settings(settings.get("speed_lines", {}))
+
+func boost_trail(duration: float, intensity: float) -> void:
+	if speed_lines != null and speed_lines.has_method("boost"):
+		speed_lines.call("boost", duration, intensity)
 
 func set_service_hold_rotation(rotation_degrees_value: Vector3) -> void:
 	service_hold_rotation_degrees = rotation_degrees_value
@@ -54,9 +57,12 @@ func set_service_hold_rotation(rotation_degrees_value: Vector3) -> void:
 
 func set_service_hold_position(hold_position: Vector3) -> void:
 	position = hold_position
+	rotation_degrees = Vector3.ZERO
 	velocity = Vector3.ZERO
 	in_flight = false
-	trail_points.clear()
+	ground_bounce_active = false
+	ground_bounce_count = 0
+	net_reaction_active = false
 	if speed_lines != null:
 		speed_lines.clear_lines()
 	_apply_visual_rotation(default_model_rotation_degrees + service_hold_rotation_degrees)
@@ -82,7 +88,7 @@ func _ready() -> void:
 		if scene is PackedScene:
 			shuttle_model = (scene as PackedScene).instantiate() as Node3D
 			shuttle_model.name = "ShuttleModel"
-			shuttle_model.scale = Vector3.ONE * 2.25
+			shuttle_model.scale = Vector3.ONE * IMPORTED_MODEL_SCALE
 			_apply_visual_rotation(default_model_rotation_degrees + service_hold_rotation_degrees)
 			add_child(shuttle_model)
 			return
@@ -105,13 +111,21 @@ func launch(to_target: Vector3, duration: float, apex: float, profile: Dictionar
 	last_position = position
 	net_fault_checked = sign(position.x) == sign(to_target.x)
 	in_flight = true
-	trail_points.clear()
+	ground_bounce_active = false
+	ground_bounce_count = 0
+	net_reaction_active = false
 	impact_started_at = Time.get_ticks_msec() / 1000.0
 	_update_visual_helpers()
 	_orient_to_velocity()
 	return predicted
 
 func update_flight(delta: float) -> void:
+	if ground_bounce_active:
+		_update_ground_bounce(delta)
+		return
+	if net_reaction_active:
+		_update_net_reaction(delta)
+		return
 	if not in_flight:
 		return
 	var drag_frame: float = pow(drag, delta * 60.0)
@@ -127,9 +141,10 @@ func update_flight(delta: float) -> void:
 	if velocity.length() < 0.4:
 		velocity *= 0.92
 	_orient_to_velocity()
-	if position.y <= GameConfig.FLOOR_Y:
-		position.y = GameConfig.FLOOR_Y
+	if position.y <= _ground_contact_y():
+		position.y = _ground_contact_y()
 		in_flight = false
+		_start_ground_bounce()
 		_update_visual_helpers()
 		landed.emit(target)
 
@@ -143,27 +158,73 @@ func _check_net_fault() -> void:
 	net_fault_checked = true
 	if crossing_y <= GameConfig.NET_CENTER_HEIGHT + 0.05:
 		in_flight = false
+		ground_bounce_active = false
+		ground_bounce_count = 0
 		position.x = 0.0
 		position.y = crossing_y
+		_start_net_reaction()
 		if speed_lines != null:
 			speed_lines.clear_lines()
 		net_fault.emit()
 
+func _start_net_reaction() -> void:
+	velocity.x = -velocity.x * net_reaction_horizontal_damping
+	velocity.z *= net_reaction_horizontal_damping
+	velocity.y = min(velocity.y, -net_reaction_drop_speed)
+	net_reaction_active = true
+
+func _update_net_reaction(delta: float) -> void:
+	var drag_frame: float = pow(drag, delta * 60.0)
+	velocity.x *= drag_frame * 0.92
+	velocity.z *= drag_frame * 0.92
+	velocity.y -= gravity * delta
+	position += velocity * delta
+	rotate_object_local(Vector3.RIGHT, net_reaction_tumble_speed * delta)
+	if position.y <= _ground_contact_y():
+		position.y = _ground_contact_y()
+		net_reaction_active = false
+		_start_ground_bounce()
+	_update_visual_helpers()
+
+func _start_ground_bounce() -> void:
+	var impact_vertical_speed: float = abs(velocity.y)
+	velocity.y = impact_vertical_speed * ground_bounce_energy
+	velocity.x *= ground_bounce_horizontal_damping
+	velocity.z *= ground_bounce_horizontal_damping
+	ground_bounce_count = 1
+	ground_bounce_active = velocity.y >= ground_bounce_min_vertical_speed
+	if not ground_bounce_active:
+		velocity = Vector3.ZERO
+
+func _update_ground_bounce(delta: float) -> void:
+	var drag_frame: float = pow(drag, delta * 60.0)
+	velocity.x *= drag_frame * 0.985
+	velocity.z *= drag_frame * 0.985
+	velocity.y -= gravity * delta
+	position += velocity * delta
+	if position.y <= _ground_contact_y():
+		position.y = _ground_contact_y()
+		if ground_bounce_count >= ground_bounce_max_count or abs(velocity.y) < ground_bounce_min_vertical_speed:
+			ground_bounce_active = false
+			ground_bounce_count = 0
+			velocity = Vector3.ZERO
+		else:
+			velocity.y = abs(velocity.y) * ground_bounce_energy
+			velocity.x *= ground_bounce_horizontal_damping
+			velocity.z *= ground_bounce_horizontal_damping
+			ground_bounce_count += 1
+	_update_visual_helpers()
+	if ground_bounce_active:
+		_orient_to_velocity()
+
 func _add_fallback_mesh() -> void:
 	var sphere: SphereMesh = SphereMesh.new()
-	sphere.radius = 0.09
-	sphere.height = 0.18
+	sphere.radius = FALLBACK_RADIUS
+	sphere.height = FALLBACK_HEIGHT
 	mesh = sphere
 	material_override = AnimeVisuals.toon_material(Color(1.0, 0.98, 0.82))
 
 func _add_visual_helpers() -> void:
-	trail_marker = MeshInstance3D.new()
-	trail_marker.name = "ShuttleTrail"
-	trail_marker.top_level = true
-	trail_marker.mesh = trail_mesh
-	trail_marker.material_override = GameConfig.material(trail_color)
-	add_child(trail_marker)
-
 	speed_lines = ShuttleSpeedLines.new()
 	speed_lines.name = "ShuttleSpeedLines"
 	add_child(speed_lines)
@@ -186,31 +247,14 @@ func _update_visual_helpers() -> void:
 		var visible_age: float = impact_age - impact_delay
 		impact_marker.visible = impact_enabled and visible_age >= 0.0 and visible_age <= impact_duration
 		if impact_marker.visible:
-			impact_marker.global_position = Vector3(last_position.x, GameConfig.FLOOR_Y + 0.028, last_position.z)
-			var impact_t: float = clamp(visible_age / max(impact_duration, 0.01), 0.0, 1.0)
-			impact_marker.scale = Vector3.ONE * lerp(impact_size_start, impact_size_end, impact_t)
-	if trail_marker == null:
-		return
+			impact_marker.global_position = Vector3(global_position.x, GameConfig.COURT_MARKER_Y, global_position.z)
+			var impact_t: float = clampf(visible_age / max(impact_duration, 0.01), 0.0, 1.0)
+			var impact_size: float = lerp(impact_size_start, impact_size_end, impact_t)
+			impact_marker.scale = Vector3(impact_size, 1.0, impact_size)
 	if speed_lines != null and in_flight:
 		speed_lines.update_speed_lines(global_position, velocity)
 	elif speed_lines != null:
 		speed_lines.clear_lines()
-	if in_flight:
-		trail_points.push_front(global_position)
-		while trail_points.size() > trail_point_limit:
-			trail_points.pop_back()
-	else:
-		trail_points.clear()
-	_draw_trail()
-
-func _draw_trail() -> void:
-	trail_mesh.clear_surfaces()
-	if trail_points.size() < 2:
-		return
-	trail_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
-	for point in trail_points:
-		trail_mesh.surface_add_vertex(point)
-	trail_mesh.surface_end()
 
 func _orient_to_velocity() -> void:
 	if velocity.length() <= 0.05:
@@ -229,12 +273,12 @@ func _apply_visual_rotation(rotation_degrees_value: Vector3) -> void:
 		rotation_degrees = rotation_degrees_value
 
 func flight_phase() -> float:
-	return clamp((Time.get_ticks_msec() / 1000.0 - flight_started_at) / max(flight_duration, 0.001), 0.0, 1.0)
+	return clampf((Time.get_ticks_msec() / 1000.0 - flight_started_at) / max(flight_duration, 0.001), 0.0, 1.0)
 
 func _apply_guidance(delta: float) -> void:
 	var remaining: float = max(flight_duration - (Time.get_ticks_msec() / 1000.0 - flight_started_at), 0.08)
 	var desired_velocity: Vector3 = (guidance_target - position) / remaining
-	var blend: float = clamp(guidance * delta, 0.0, 0.08)
+	var blend: float = clampf(guidance * delta, 0.0, 0.08)
 	velocity.x = lerp(velocity.x, desired_velocity.x, blend)
 	velocity.z = lerp(velocity.z, desired_velocity.z, blend)
 	if position.y < GameConfig.NET_CENTER_HEIGHT + 0.5 and sign(position.x) != sign(guidance_target.x):
@@ -278,16 +322,16 @@ func _predict_landing(start: Vector3, start_velocity: Vector3, to_target: Vector
 		vel.y -= shot_gravity * dt
 		var remaining: float = max(duration - elapsed, 0.08)
 		var desired_velocity: Vector3 = (to_target - pos) / remaining
-		var blend: float = clamp(shot_guidance * dt, 0.0, 0.08)
+		var blend: float = clampf(shot_guidance * dt, 0.0, 0.08)
 		vel.x = lerp(vel.x, desired_velocity.x, blend)
 		vel.z = lerp(vel.z, desired_velocity.z, blend)
 		if pos.y < GameConfig.NET_CENTER_HEIGHT + 0.5 and sign(pos.x) != sign(to_target.x):
 			vel.y = max(vel.y, desired_velocity.y * 0.35)
 		pos += vel * dt
 		elapsed += dt
-		if pos.y <= GameConfig.FLOOR_Y and elapsed > 0.08:
-			return Vector3(pos.x, GameConfig.FLOOR_Y, pos.z)
-	return Vector3(pos.x, GameConfig.FLOOR_Y, pos.z)
+		if pos.y <= _ground_contact_y() and elapsed > 0.08:
+			return Vector3(pos.x, GameConfig.COURT_VISUAL_SURFACE_TOP_Y, pos.z)
+	return Vector3(pos.x, GameConfig.COURT_VISUAL_SURFACE_TOP_Y, pos.z)
 
 func _ensure_net_clearance(start: Vector3, to_target: Vector3, duration: float, vertical_velocity: float, shot_gravity: float, apex: float) -> float:
 	if sign(start.x) == sign(to_target.x):
@@ -297,7 +341,7 @@ func _ensure_net_clearance(start: Vector3, to_target: Vector3, duration: float, 
 	var horizontal_total: float = abs(to_target.x - start.x)
 	if horizontal_total <= 0.01:
 		return vertical_velocity
-	var t_at_net: float = clamp(abs(start.x) / horizontal_total, 0.0, 1.0) * duration
+	var t_at_net: float = clampf(abs(start.x) / horizontal_total, 0.0, 1.0) * duration
 	var min_height: float = _net_clearance() + max(apex - GameConfig.NET_CENTER_HEIGHT, 0.0) * 0.1
 	var corrected_velocity: float = vertical_velocity
 	for i in range(4):
@@ -323,6 +367,9 @@ func _simulate_vertical_at_time(start_y: float, vertical_velocity: float, shot_g
 
 func _net_clearance() -> float:
 	return GameConfig.NET_CENTER_HEIGHT + 0.28
+
+func _ground_contact_y() -> float:
+	return GameConfig.COURT_VISUAL_SURFACE_TOP_Y + GROUND_VISUAL_CLEARANCE
 
 func _response_scale(value: float) -> float:
 	if abs(value) >= 0.001:

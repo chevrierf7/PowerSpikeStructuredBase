@@ -25,7 +25,7 @@ static func hit_state_from_kind(kind: String, backhand: bool = false) -> String:
 		"serve_short":
 			return "serve_short"
 		"serve_drive":
-			return "forehand_drive"
+			return "serve_drive"
 		"serve_lob":
 			return "serve_long"
 		"drop":
@@ -59,12 +59,22 @@ static func build_animation_names(animations: PackedStringArray) -> Dictionary:
 		"forehand_high_drop": _pick_animation(animations, ["forehand_high_drop", "amorti", "drop", "hit"]),
 		"forehand_high_clear": _pick_animation(animations, ["forehand_high_clear", "degage", "clear", "hit", "coup"]),
 		"forehand_high_smash": _pick_animation(animations, ["forehand_high_smash", "smash", "tendu"]),
+		"jump_smash": _pick_animation(animations, ["jump_smash", "jump smash", "smash saute", "smash"]),
 		"backhand_low_drop_block": _pick_animation(animations, ["backhand_low_drop_block", "backhand", "revers", "hit"]),
 		"backhand_low_lift": _pick_animation(animations, ["backhand_low_lift", "backhand", "revers", "hit"]),
 		"backhand_drive": _pick_animation(animations, ["backhand_drive", "backhand", "revers", "hit"]),
 		"backhand_high_drop": _pick_animation(animations, ["backhand_high_drop", "backhand", "revers", "hit"]),
 		"backhand_high_clear": _pick_animation(animations, ["backhand_high_clear", "backhand", "revers", "hit"]),
 	}
+	names["idle_ready"] = names["idle"]
+	names["move_side"] = names["move_right"] if not String(names["move_right"]).is_empty() else names["move_left"]
+	names["clear_forehand"] = names["forehand_high_clear"]
+	names["smash_forehand"] = names["forehand_high_smash"]
+	names["drive_forehand"] = names["forehand_drive"]
+	names["net_shot"] = names["forehand_high_drop"]
+	names["lift_forehand"] = names["forehand_low_lift_clear"]
+	names["defense_block"] = names["forehand_low_drop_block"]
+	names["recovery"] = names["idle"]
 	if String(names["idle"]).is_empty():
 		names["idle"] = animations[0]
 	for state in names.keys():

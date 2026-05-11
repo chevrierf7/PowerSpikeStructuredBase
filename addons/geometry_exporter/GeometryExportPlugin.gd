@@ -8,8 +8,6 @@ const CourtBuilderScript := preload("res://scripts/world/CourtBuilder.gd")
 const GymBuilderScript := preload("res://scripts/world/GymBuilder.gd")
 
 const COURT_NAMES := {
-	"Surface": true,
-	"Surround": true,
 	"CourtLine": true
 }
 
@@ -17,7 +15,6 @@ const NET_PREFIXES := ["Net"]
 
 const GYM_NAMES := {
 	"JPWoodFloor": true,
-	"FloorPlankLine": true,
 	"ShortWallWood": true,
 	"ShortWallUpper": true,
 	"SideWallWood": true,

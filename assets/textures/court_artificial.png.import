@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://dhi520knt5i4"
 path.s3tc="res://.godot/imported/court_artificial.png-8ed7f90e29d2498bce56b0b03d05cf75.s3tc.ctex"
+path.etc2="res://.godot/imported/court_artificial.png-8ed7f90e29d2498bce56b0b03d05cf75.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/textures/court_artificial.png"
-dest_files=["res://.godot/imported/court_artificial.png-8ed7f90e29d2498bce56b0b03d05cf75.s3tc.ctex"]
+dest_files=["res://.godot/imported/court_artificial.png-8ed7f90e29d2498bce56b0b03d05cf75.s3tc.ctex", "res://.godot/imported/court_artificial.png-8ed7f90e29d2498bce56b0b03d05cf75.etc2.ctex"]
 
 [params]
 

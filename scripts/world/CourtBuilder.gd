@@ -1,8 +1,6 @@
 class_name CourtBuilder
 extends Node3D
 
-@export var surround_material: StandardMaterial3D
-@export var surface_material: StandardMaterial3D
 @export var line_material: StandardMaterial3D
 @export var net_post_material: StandardMaterial3D
 @export var net_band_material: StandardMaterial3D
@@ -14,9 +12,6 @@ func _ready() -> void:
 	build()
 
 func build() -> void:
-	var preset := CourtPreset.court(preset_name)
-	_add_box("Surround", Vector3(0, -0.025, 0), Vector3(GameConfig.COURT_LENGTH + 2.2, 0.025, GameConfig.COURT_WIDTH + 2.0), _mat(surround_material, preset["surround"]))
-	_add_box("Surface", Vector3.ZERO, Vector3(GameConfig.COURT_LENGTH, 0.05, GameConfig.COURT_WIDTH), _mat(surface_material, preset["surface"]))
 	_build_lines()
 	_build_net()
 
@@ -65,7 +60,9 @@ func _add_line(pos: Vector3, size: Vector3) -> void:
 	var preset := CourtPreset.court(preset_name)
 	var painted_pos := Vector3(pos.x, GameConfig.COURT_LINE_CENTER_Y, pos.z)
 	var painted_size := Vector3(size.x, GameConfig.COURT_LINE_VISUAL_HEIGHT, size.z)
-	_add_box("CourtLine", painted_pos, painted_size, _mat(line_material, preset["line"]))
+	var line := _add_box("CourtLine", painted_pos, painted_size, _mat(line_material, preset["line"]))
+	line.visible = false
+	line.add_to_group("court_lines")
 
 func _add_box(node_name: String, pos: Vector3, size: Vector3, mat: Material) -> MeshInstance3D:
 	var node := MeshInstance3D.new()

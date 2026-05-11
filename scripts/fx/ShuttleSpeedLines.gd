@@ -12,6 +12,8 @@ var _material := StandardMaterial3D.new()
 var _points: Array[Vector3] = []
 var _last_position := Vector3.ZERO
 var _has_last_position := false
+var _boost_until := -10.0
+var _boost_intensity := 0.0
 const MAX_POINTS := 18
 const MIN_VISIBLE_SPEED := 1.2
 const MAX_REFERENCE_SPEED := 14.0
@@ -38,6 +40,10 @@ func apply_settings(settings: Dictionary) -> void:
 	_material.albedo_color = Color(line_color.r, line_color.g, line_color.b, opacity)
 	visible = speed_lines_enabled
 
+func boost(duration: float, intensity: float) -> void:
+	_boost_until = Time.get_ticks_msec() / 1000.0 + max(duration, 0.0)
+	_boost_intensity = max(_boost_intensity, clamp(intensity, 0.0, 2.0))
+
 func clear_lines() -> void:
 	_mesh.clear_surfaces()
 	_points.clear()
@@ -62,9 +68,10 @@ func update_speed_lines(world_position: Vector3, velocity: Vector3) -> void:
 		return
 	global_transform = Transform3D.IDENTITY
 	var speed_factor: float = clamp((speed - MIN_VISIBLE_SPEED) / (MAX_REFERENCE_SPEED - MIN_VISIBLE_SPEED), 0.0, 1.0)
-	var length_scale: float = lerp(0.55, 1.55, speed_factor)
-	var width_scale: float = lerp(0.70, 1.25, speed_factor)
-	var opacity_scale: float = lerp(0.45, 1.0, speed_factor)
+	var boost_factor: float = _active_boost_factor()
+	var length_scale: float = lerp(0.55, 1.55, speed_factor) * (1.0 + boost_factor * 0.34)
+	var width_scale: float = lerp(0.70, 1.25, speed_factor) * (1.0 + boost_factor * 0.18)
+	var opacity_scale: float = min(1.35, lerp(0.45, 1.0, speed_factor) * (1.0 + boost_factor * 0.30))
 	var direction: Vector3 = velocity.normalized()
 	if _points.size() >= 2:
 		_points[0] = world_position - direction * 0.08
@@ -91,6 +98,13 @@ func _add_curved_line(target_length: float, width: float, offset: float, alpha_s
 		var t1: float = clamp((accumulated + segment_length) / max(target_length, 0.001), 0.0, 1.0)
 		_add_segment(start, end, width, offset, alpha_scale, t0, t1)
 		accumulated += segment_length
+
+func _active_boost_factor() -> float:
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now > _boost_until:
+		_boost_intensity = 0.0
+		return 0.0
+	return clamp(_boost_intensity, 0.0, 2.0)
 
 func _add_segment(start: Vector3, end: Vector3, width: float, offset: float, alpha_scale: float, t0: float, t1: float) -> void:
 	var direction: Vector3 = (start - end).normalized()

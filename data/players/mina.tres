@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PlayerProfile" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/PlayerProfile.gd" id="1"]
+[ext_resource type="Resource" path="res://data/vroid_avatars/akiro.tres" id="2_vroid"]
+
+[resource]
+script = ExtResource("1")
+id = "mina"
+display_name = "Mina"
+color_primary = Color(1, 0.22, 0.34, 1)
+color_secondary = Color(0.22, 0.025, 0.075, 1)
+color_accent = Color(1, 0.78, 0.20, 1)
+vroid_avatar_profile = ExtResource("2_vroid")
+ai_style = "aggressive"
+play_style = "smash"

@@ -10,8 +10,6 @@ static func court(preset_name: String = JP_ORANGE_ARCADE) -> Dictionary:
 	match preset_name:
 		JP_WOOD_CLASSIC:
 			return {
-				"surround": Color(0.76, 0.56, 0.34),
-				"surface": Color(0.70, 0.45, 0.22),
 				"line": Color(0.93, 0.94, 0.88),
 				"net_post": Color(0.78, 0.82, 0.84),
 				"net_band": Color(0.98, 0.98, 0.94),
@@ -19,8 +17,6 @@ static func court(preset_name: String = JP_ORANGE_ARCADE) -> Dictionary:
 			}
 		JP_BLUE_COURT:
 			return {
-				"surround": Color(0.18, 0.42, 0.52),
-				"surface": Color(0.08, 0.32, 0.62),
 				"line": Color(0.94, 0.95, 0.89),
 				"net_post": Color(0.80, 0.84, 0.86),
 				"net_band": Color(0.98, 0.98, 0.94),
@@ -28,8 +24,6 @@ static func court(preset_name: String = JP_ORANGE_ARCADE) -> Dictionary:
 			}
 		JP_GREEN_COURT:
 			return {
-				"surround": Color(0.18, 0.36, 0.30),
-				"surface": Color(0.08, 0.46, 0.32),
 				"line": Color(0.94, 0.95, 0.89),
 				"net_post": Color(0.80, 0.84, 0.82),
 				"net_band": Color(0.98, 0.98, 0.94),
@@ -37,8 +31,6 @@ static func court(preset_name: String = JP_ORANGE_ARCADE) -> Dictionary:
 			}
 		_:
 			return {
-				"surround": Color(0.18, 0.35, 0.43),
-				"surface": Color(0.78, 0.42, 0.18),
 				"line": Color(0.95, 0.95, 0.88),
 				"net_post": Color(0.82, 0.85, 0.86),
 				"net_band": Color(0.98, 0.98, 0.94),

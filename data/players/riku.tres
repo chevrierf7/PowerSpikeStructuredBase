@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="PlayerProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/PlayerProfile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "riku"
+display_name = "Riku"
+color_primary = Color(0.18, 0.42, 1, 1)
+color_secondary = Color(0.02, 0.045, 0.16, 1)
+color_accent = Color(0.62, 0.82, 1, 1)
+ai_style = "counter"
+play_style = "counter"
