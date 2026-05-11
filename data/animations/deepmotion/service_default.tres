@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="DeepMotionAnimationProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/player/DeepMotionAnimationProfile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+id = "service_default"
+display_name = "Service Default"
+animation_scene = "res://assets/animations/deepmotion/approved/service_default.glb"
+root_yaw_offset_degrees = 0.0
+approved_for_game = false

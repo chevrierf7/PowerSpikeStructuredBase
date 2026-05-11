@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="VroidAvatarProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/player/VroidAvatarProfile.gd" id="1_profile"]
+
+[resource]
+script = ExtResource("1_profile")
+id = "test_shuttle_rush_perso"
+display_name = "Test Shuttle Rush Perso"
+avatar_scene = "res://characters/player/vroid/godot/test_shuttle_rush_perso.glb"
+avatar_rotation_degrees = Vector3(0, 0, 0)
+visual_scale = 1.08
+hand_grip_rotation = Vector3(0, 0, 90)
+racket_offset_position = Vector3(0.07, -0.11, -0.03)
+racket_offset_rotation = Vector3(5, 10, 0)
+jump_smash_animation_scene = "res://assets/animations/deepmotion/approved/smash.glb"
+service_animation_scene = "res://assets/animations/deepmotion/approved/service.glb"

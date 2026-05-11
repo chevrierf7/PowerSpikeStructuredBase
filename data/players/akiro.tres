@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PlayerProfile" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/PlayerProfile.gd" id="1"]
+[ext_resource type="Resource" path="res://data/vroid_avatars/akiro.tres" id="2_vroid"]
+
+[resource]
+script = ExtResource("1")
+id = "akiro"
+display_name = "Akiro"
+color_primary = Color(0.95, 0.36, 0.10, 1)
+color_secondary = Color(0.18, 0.055, 0.02, 1)
+color_accent = Color(1, 0.88, 0.42, 1)
+vroid_avatar_profile = ExtResource("2_vroid")
+ai_style = "power"
+play_style = "drive"

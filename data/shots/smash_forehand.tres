@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ShotData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/ShotData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+shot_id = &"smash_forehand"
+animation_name = &"smash_forehand"
+impact_time = 0.28
+recovery_time = 0.95
+move_speed_scale = 0.35
+shuttle_speed = 20.0
+shuttle_arc = 2.0
+shuttle_spin = Vector3(0.2, 0, 0)
+can_jump = false
+is_attack = true
+hit_stop_duration = 0.045
+feedback_intensity = 1.0
+camera_pulse = 1.0
+trail_boost = 0.25
+impact_flash_scale = 1.25

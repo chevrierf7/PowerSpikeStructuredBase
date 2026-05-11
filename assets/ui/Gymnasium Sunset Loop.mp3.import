@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://c0k8awefl8axt"
+path="res://.godot/imported/Gymnasium Sunset Loop.mp3-493d8ec25aefff049254279f2a9ba71a.mp3str"
+
+[deps]
+
+source_file="res://assets/ui/Gymnasium Sunset Loop.mp3"
+dest_files=["res://.godot/imported/Gymnasium Sunset Loop.mp3-493d8ec25aefff049254279f2a9ba71a.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

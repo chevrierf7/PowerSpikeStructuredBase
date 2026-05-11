@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="PlayerProfile" load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/PlayerProfile.gd" id="1"]
+[ext_resource type="Resource" path="res://data/vroid_avatars/test_shuttle_rush_perso.tres" id="2_vroid"]
+
+[resource]
+script = ExtResource("1")
+id = "kai"
+display_name = "Kai"
+color_primary = Color(0.12, 0.62, 1, 1)
+color_secondary = Color(0.02, 0.12, 0.22, 1)
+color_accent = Color(0.95, 0.92, 0.35, 1)
+vroid_avatar_profile = ExtResource("2_vroid")
+ai_style = "balanced"
+play_style = "all_rounder"

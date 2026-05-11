@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ShotData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/ShotData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+shot_id = &"drive_forehand"
+animation_name = &"drive_forehand"
+impact_time = 0.22
+recovery_time = 0.26
+move_speed_scale = 0.65
+shuttle_speed = 18.0
+shuttle_arc = 1.95
+shuttle_spin = Vector3(0, 0.35, 0)
+can_jump = false
+is_attack = true
+hit_stop_duration = 0.025
+feedback_intensity = 0.72
+camera_pulse = 0.62
+trail_boost = 0.18
+impact_flash_scale = 0.95

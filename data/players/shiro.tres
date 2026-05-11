@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="PlayerProfile" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/PlayerProfile.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "shiro"
+display_name = "Shiro"
+color_primary = Color(0.86, 0.92, 1, 1)
+color_secondary = Color(0.08, 0.10, 0.16, 1)
+color_accent = Color(0.50, 0.78, 1, 1)
+ai_style = "defensive"
+play_style = "clear"

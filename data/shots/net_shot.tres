@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ShotData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/ShotData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+shot_id = &"net_shot"
+animation_name = &"net_shot"
+impact_time = 0.24
+recovery_time = 0.34
+move_speed_scale = 0.50
+shuttle_speed = 7.5
+shuttle_arc = 1.85
+shuttle_spin = Vector3(0.0, 0.2, 0.15)
+can_jump = false
+is_attack = false
+hit_stop_duration = 0.006
+feedback_intensity = 0.30
+camera_pulse = 0.12
+trail_boost = 0.08
+impact_flash_scale = 0.70

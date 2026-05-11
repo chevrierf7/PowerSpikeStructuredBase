@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://br1dd6s3qm68m"
+
+[deps]
+
+files=["res://tools/simulation_impacts.hit.translation", "res://tools/simulation_impacts.hitter.translation", "res://tools/simulation_impacts.kind.translation", "res://tools/simulation_impacts.animation.translation", "res://tools/simulation_impacts.target.translation", "res://tools/simulation_impacts.target.translation", "res://tools/simulation_impacts.receiver.translation", "res://tools/simulation_impacts.receiver.translation", "res://tools/simulation_impacts.receiver.translation", "res://tools/simulation_impacts.distance.translation", "res://tools/simulation_impacts.distance.translation", "res://tools/simulation_impacts.distance.translation"]
+
+source_file="res://tools/simulation_impacts.csv"
+dest_files=["res://tools/simulation_impacts.hit.translation", "res://tools/simulation_impacts.hitter.translation", "res://tools/simulation_impacts.kind.translation", "res://tools/simulation_impacts.animation.translation", "res://tools/simulation_impacts.target.translation", "res://tools/simulation_impacts.target.translation", "res://tools/simulation_impacts.receiver.translation", "res://tools/simulation_impacts.receiver.translation", "res://tools/simulation_impacts.receiver.translation", "res://tools/simulation_impacts.distance.translation", "res://tools/simulation_impacts.distance.translation", "res://tools/simulation_impacts.distance.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true
